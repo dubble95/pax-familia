@@ -18,7 +18,7 @@
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen pb-12">
   <!-- 상단 네비게이션 -->
-  <header class="bg-slate-800/80 backdrop-blur border-b border-slate-700 sticky top-0 z-50">
+  <header class="bg-slate-800/80 backdrop-blur border-b border-slate-700 sticky top-0 z-40">
     <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
       <div class="flex items-center space-x-3">
         <span class="text-2xl">🕊️</span>
@@ -30,7 +30,23 @@
           <p class="text-xs text-slate-400">통합 크로스 플랫폼 스크린타임 관리</p>
         </div>
       </div>
-      <div class="flex items-center space-x-2">
+      <div class="flex items-center space-x-3">
+        <!-- 부모 로그인 상태 표시 영역 -->
+        <div id="authContainer" class="flex items-center gap-2">
+          <div id="authLoggedIn" class="hidden flex items-center gap-2">
+            <span class="text-xs bg-indigo-500/20 text-indigo-300 px-2.5 py-1 rounded-lg border border-indigo-500/30 flex items-center gap-1.5 font-medium">
+              <i class="fa-solid fa-shield-halved text-emerald-400"></i>
+              <b id="authUsername">admin</b> (부모)
+            </span>
+            <button onclick="handleLogout()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs text-slate-300 hover:text-white transition">
+              로그아웃
+            </button>
+          </div>
+          <button id="authLoginBtn" onclick="openLoginModal()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-950/20">
+            <i class="fa-solid fa-user-lock"></i> 부모 로그인
+          </button>
+        </div>
+
         <button onclick="fetchStatus()" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700 transition" title="새로고침">
           <i class="fa-solid fa-arrows-rotate" id="refreshIcon"></i>
         </button>
@@ -97,15 +113,21 @@
       </div>
     </div>
 
-    <!-- 2. 기기별 실시간 현황 모니터링 -->
+    <!-- 2. 기기별 실시간 현황 모니터링 (순서 고정 & 신규 기기 등록) -->
     <div>
-      <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 px-1 flex items-center justify-between">
-        <span>연동 기기 실시간 모니터링 (클라우드 동기화)</span>
-        <span class="text-xs text-slate-500 font-normal">실시간 Heartbeat</span>
-      </h2>
+      <div class="flex items-center justify-between mb-3 px-1">
+        <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+          <span>연동 기기 실시간 모니터링 (클라우드 동기화)</span>
+          <span class="text-xs text-slate-500 font-normal">실시간 Heartbeat</span>
+        </h2>
+        <!-- 새 기기 등록 버튼 -->
+        <button onclick="openPairingModal()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-950/20">
+          <i class="fa-solid fa-plus"></i> 새 기기 등록
+        </button>
+      </div>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="deviceList">
-        <!-- 동적 렌더링 영역 -->
+        <!-- 동적 렌더링 영역 (항상 고정된 순서로 렌더링) -->
       </div>
     </div>
 
@@ -176,7 +198,7 @@
 
       <!-- 새 앱 추가 인풋 -->
       <div class="flex items-center gap-2 pt-2 border-t border-slate-700/50 text-xs">
-        <input type="text" id="newWhitelistApp" placeholder="예: 메가스터디, 듀오링고, 클래스룸" class="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500">
+        <input type="text" id="newWhitelistApp" placeholder="예: EBS, 메가스터디, 듀오링고, 클래스룸" class="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500">
         <button onclick="addWhitelistApp()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition flex items-center gap-1.5">
           <i class="fa-solid fa-plus"></i> 추가
         </button>
@@ -204,9 +226,297 @@
     </div>
   </main>
 
+  <!-- ======================== 모달 영역 ======================== -->
+
+  <!-- A. 부모 로그인 모달 -->
+  <div id="loginModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl relative">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+            <i class="fa-solid fa-lock text-base"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-base text-white">부모 로그인</h3>
+            <p class="text-[11px] text-slate-400">대시보드 관리자 권한 인증</p>
+          </div>
+        </div>
+        <button onclick="closeLoginModal()" class="text-slate-400 hover:text-white text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form onsubmit="handleLoginSubmit(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">아이디</label>
+          <input type="text" id="loginUsername" value="admin" class="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 font-medium">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">비밀번호</label>
+          <input type="password" id="loginPassword" placeholder="기본: pax1234" class="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div id="loginError" class="hidden p-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">
+          아이디 또는 비밀번호가 올바르지 않습니다.
+        </div>
+
+        <div class="flex gap-2 pt-2">
+          <button type="button" onclick="closeLoginModal()" class="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-xs font-semibold text-slate-300 transition">
+            취소
+          </button>
+          <button type="submit" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-950/30">
+            로그인
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- B. 새 기기 등록 (6자리 페어링 코드) 모달 -->
+  <div id="pairingModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl relative space-y-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+            <i class="fa-solid fa-link text-base"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-base text-white">새 기기 등록 (페어링)</h3>
+            <p class="text-[11px] text-slate-400">자녀의 폰, 태블릿, PC를 연동합니다</p>
+          </div>
+        </div>
+        <button onclick="closePairingModal()" class="text-slate-400 hover:text-white text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- 6자리 핀코드 디스플레이 -->
+      <div class="text-center py-4 bg-slate-900 rounded-2xl border border-emerald-500/30 space-y-2">
+        <div class="text-xs text-slate-400 font-medium">기기에서 아래 6자리 코드를 입력하세요</div>
+        <div id="pairingCodeDisplay" class="text-4xl md:text-5xl font-mono font-black tracking-[0.25em] text-emerald-400 select-all py-1">
+          ------
+        </div>
+        <div class="flex items-center justify-center gap-2 text-xs text-slate-400">
+          <span>⏱️ 남은 유효 시간:</span>
+          <b id="pairingTimer" class="text-amber-400 font-mono">15:00</b>
+          <button onclick="copyPairingCode()" class="ml-2 text-xs text-slate-400 hover:text-white bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+            <i class="fa-regular fa-copy"></i> 복사
+          </button>
+        </div>
+      </div>
+
+      <!-- 기기별 연동 안내 -->
+      <div class="space-y-2 text-xs text-slate-300 bg-slate-900/60 rounded-xl p-3.5 border border-slate-700/50">
+        <div class="font-bold text-slate-200 mb-1 flex items-center gap-1.5">
+          <i class="fa-solid fa-circle-info text-indigo-400"></i> 기기별 등록 방법
+        </div>
+        <div class="space-y-1.5 text-slate-400">
+          <div class="flex items-start gap-2">
+            <span class="text-indigo-400 font-bold">1.</span>
+            <span><b>안드로이드 앱:</b> 앱 실행 후 초기 [기기 등록] 화면에 위 6자리 입력</span>
+          </div>
+          <div class="flex items-start gap-2">
+            <span class="text-indigo-400 font-bold">2.</span>
+            <span><b>윈도우 PC:</b> 설치 파일 실행 시 6자리 입력 또는 <code>pax-winagent.exe -code &lt;코드&gt;</code></span>
+          </div>
+          <div class="flex items-start gap-2">
+            <span class="text-indigo-400 font-bold">3.</span>
+            <span><b>테스트 시뮬레이터:</b> <code>./bin/pax-sim -code &lt;코드&gt;</code> 실행 시 즉시 등록</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex gap-2 pt-1">
+        <button onclick="requestNewPairingCode()" class="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-xs font-semibold text-slate-300 transition flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-rotate"></i> 새 코드 발급
+        </button>
+        <button onclick="closePairingModal()" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition">
+          완료 / 닫기
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let currentData = null;
+    let authToken = localStorage.getItem('pax_auth_token') || '';
+    let pairingTimerInterval = null;
+    let pairingExpiresAt = null;
 
+    // --- 인증 관련 함수 ---
+    function updateAuthUI(isLoggedIn, username) {
+      const loggedInDiv = document.getElementById('authLoggedIn');
+      const loginBtn = document.getElementById('authLoginBtn');
+      if (isLoggedIn) {
+        loggedInDiv.classList.remove('hidden');
+        loginBtn.classList.add('hidden');
+        document.getElementById('authUsername').textContent = username || 'admin';
+      } else {
+        loggedInDiv.classList.add('hidden');
+        loginBtn.classList.remove('hidden');
+      }
+    }
+
+    async function checkAuth() {
+      if (!authToken) {
+        updateAuthUI(false);
+        return;
+      }
+      try {
+        const res = await fetch('/api/auth/check', {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const data = await res.json();
+        if (data.authenticated) {
+          updateAuthUI(true, data.username);
+        } else {
+          localStorage.removeItem('pax_auth_token');
+          authToken = '';
+          updateAuthUI(false);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function openLoginModal() {
+      document.getElementById('loginError').classList.add('hidden');
+      document.getElementById('loginModal').classList.remove('hidden');
+    }
+
+    function closeLoginModal() {
+      document.getElementById('loginModal').classList.add('hidden');
+    }
+
+    async function handleLoginSubmit(e) {
+      e.preventDefault();
+      const u = document.getElementById('loginUsername').value.trim();
+      const p = document.getElementById('loginPassword').value;
+      const errEl = document.getElementById('loginError');
+      errEl.classList.add('hidden');
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: u, password: p })
+        });
+        const data = await res.json();
+        if (data.success && data.token) {
+          authToken = data.token;
+          localStorage.setItem('pax_auth_token', authToken);
+          updateAuthUI(true, data.username);
+          closeLoginModal();
+          fetchStatus();
+        } else {
+          errEl.textContent = data.error || '로그인에 실패했습니다.';
+          errEl.classList.remove('hidden');
+        }
+      } catch (err) {
+        errEl.textContent = '서버 연결 실패: ' + err.message;
+        errEl.classList.remove('hidden');
+      }
+    }
+
+    async function handleLogout() {
+      if (!confirm('로그아웃 하시겠습니까?')) return;
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+      } catch (e) {}
+      localStorage.removeItem('pax_auth_token');
+      authToken = '';
+      updateAuthUI(false);
+    }
+
+    // --- 페어링 코드 모달 관련 ---
+    async function openPairingModal() {
+      document.getElementById('pairingModal').classList.remove('hidden');
+      await requestNewPairingCode();
+    }
+
+    function closePairingModal() {
+      document.getElementById('pairingModal').classList.add('hidden');
+      if (pairingTimerInterval) clearInterval(pairingTimerInterval);
+      fetchStatus();
+    }
+
+    async function requestNewPairingCode() {
+      const codeEl = document.getElementById('pairingCodeDisplay');
+      codeEl.textContent = '생성 중...';
+      try {
+        const res = await fetch('/api/devices/pairing-code', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ child_id: 'child_1' })
+        });
+        const data = await res.json();
+        if (data.success && data.code) {
+          codeEl.textContent = data.code;
+          pairingExpiresAt = new Date(data.expires_at).getTime();
+          startPairingTimer();
+        } else {
+          codeEl.textContent = '오류 발생';
+        }
+      } catch (err) {
+        codeEl.textContent = '오류 발생';
+      }
+    }
+
+    function startPairingTimer() {
+      if (pairingTimerInterval) clearInterval(pairingTimerInterval);
+      const timerEl = document.getElementById('pairingTimer');
+
+      function update() {
+        const diff = Math.max(0, Math.floor((pairingExpiresAt - Date.now()) / 1000));
+        const m = String(Math.floor(diff / 60)).padStart(2, '0');
+        const s = String(diff % 60).padStart(2, '0');
+        timerEl.textContent = `${m}:${s}`;
+        if (diff <= 0) {
+          clearInterval(pairingTimerInterval);
+          document.getElementById('pairingCodeDisplay').textContent = '만료됨';
+        }
+      }
+      update();
+      pairingTimerInterval = setInterval(update, 1000);
+    }
+
+    function copyPairingCode() {
+      const code = document.getElementById('pairingCodeDisplay').textContent.trim();
+      if (!code || code === '------' || code.includes('오류')) return;
+      navigator.clipboard.writeText(code).then(() => {
+        alert('페어링 코드(' + code + ')가 클립보드에 복사되었습니다.');
+      });
+    }
+
+    // 기기 연동 해제 (삭제)
+    async function deleteDevice(deviceId, deviceName) {
+      if (!confirm(`'${deviceName}' 기기의 연동을 해제하시겠습니까?`)) return;
+      try {
+        const res = await fetch('/api/devices/delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken
+          },
+          body: JSON.stringify({ device_id: deviceId })
+        });
+        if (res.ok) {
+          fetchStatus();
+        } else {
+          alert('기기 연동 해제 실패');
+        }
+      } catch (e) {
+        alert('서버 통신 실패: ' + e.message);
+      }
+    }
+
+    // --- 전체 상태 조회 및 렌더링 ---
     async function fetchStatus() {
       const icon = document.getElementById('refreshIcon');
       if (icon) icon.classList.add('fa-spin');
@@ -272,14 +582,29 @@
         pBar.className = 'bg-indigo-500 h-full rounded-full transition-all duration-500';
       }
 
+      // ⭐️ 기기 카드 순서 고정 정렬 알고리즘:
+      // 1) created_at(등록일시)이 존재하면 등록 순서대로 고정
+      // 2) 유형별 고정 순서 (폰 -> 태블릿 -> PC)
+      // 3) ID 기준
+      const typeRank = { 'android_phone': 1, 'android_tablet': 2, 'windows_pc': 3 };
+      const rawDevices = currentData.devices || [];
+      const sortedDevices = [...rawDevices].sort((a, b) => {
+        if (a.created_at && b.created_at && a.created_at !== b.created_at) {
+          return new Date(a.created_at) - new Date(b.created_at);
+        }
+        const r1 = typeRank[a.type] || 4;
+        const r2 = typeRank[b.type] || 4;
+        if (r1 !== r2) return r1 - r2;
+        return (a.id || '').localeCompare(b.id || '');
+      });
+
       // 기기 카드 렌더링 & 통계 누적
       const deviceContainer = document.getElementById('deviceList');
       deviceContainer.innerHTML = '';
 
       let phoneSec = 0, tabletSec = 0, pcSec = 0;
-      const devices = currentData.devices || [];
 
-      devices.forEach(dev => {
+      sortedDevices.forEach(dev => {
         let iconClass = 'fa-mobile-screen-button';
         let typeBadge = '안드로이드 폰';
         const devUsedMin = Math.floor((dev.used_seconds || 0) / 60);
@@ -324,7 +649,12 @@
                   <span class="text-[11px] text-slate-400">${typeBadge}</span>
                 </div>
               </div>
-              <div>${statusBadge}</div>
+              <div class="flex items-center gap-2">
+                ${statusBadge}
+                <button onclick="deleteDevice('${dev.id}', '${dev.name}')" class="text-slate-500 hover:text-red-400 p-1 transition" title="기기 연동 해제">
+                  <i class="fa-regular fa-trash-can text-xs"></i>
+                </button>
+              </div>
             </div>
             <div class="mt-3 bg-slate-900/60 rounded-lg p-2.5 border border-slate-700/50">
               <div class="text-[11px] text-slate-400">현재 활성 프로그램 / 앱:</div>
@@ -390,7 +720,7 @@
       const targetState = !currentData.child.force_locked;
       await fetch('/api/lock', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
         body: JSON.stringify({ child_id: 'child_1', lock: targetState })
       });
       fetchStatus();
@@ -399,7 +729,7 @@
     async function addBonus(mins) {
       await fetch('/api/bonus', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
         body: JSON.stringify({ child_id: 'child_1', minutes: mins })
       });
       fetchStatus();
@@ -410,7 +740,7 @@
       if (isNaN(val) || val <= 0) return alert('올바른 분(시간)을 입력하세요');
       await fetch('/api/quota', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
         body: JSON.stringify({ child_id: 'child_1', minutes: val })
       });
       fetchStatus();
@@ -422,7 +752,7 @@
       const end = document.getElementById('bedtimeEnd').value;
       await fetch('/api/bedtime', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
         body: JSON.stringify({ child_id: 'child_1', enabled, start, end })
       });
       fetchStatus();
@@ -434,7 +764,7 @@
       if (!val) return;
       await fetch('/api/whitelist', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
         body: JSON.stringify({ child_id: 'child_1', action: 'add', app: val })
       });
       input.value = '';
@@ -444,7 +774,7 @@
     async function removeWhitelistApp(app) {
       await fetch('/api/whitelist', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
         body: JSON.stringify({ child_id: 'child_1', action: 'remove', app })
       });
       fetchStatus();
@@ -452,10 +782,14 @@
 
     async function resetToday() {
       if (!confirm('오늘의 사용 시간을 초기화하시겠습니까? (테스트용)')) return;
-      await fetch('/api/reset?child_id=child_1');
+      await fetch('/api/reset?child_id=child_1', {
+        headers: { 'Authorization': 'Bearer ' + authToken }
+      });
       fetchStatus();
     }
 
+    // 초기화
+    checkAuth();
     fetchStatus();
     setInterval(fetchStatus, 2000);
   </script>

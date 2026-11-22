@@ -15,10 +15,24 @@ import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.google.gson.Gson
+import com.paxfamilia.agent.model.DeviceRegisterRequest
+import com.paxfamilia.agent.model.DeviceRegisterResponse
 import com.paxfamilia.agent.model.DeviceType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
 
+    private lateinit var etPairingCode: EditText
+    private lateinit var btnPairWithCode: Button
     private lateinit var etServerUrl: EditText
     private lateinit var etChildId: EditText
     private lateinit var etDeviceName: EditText
@@ -46,6 +60,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
+        etPairingCode = findViewById(R.id.etPairingCode)
+        btnPairWithCode = findViewById(R.id.btnPairWithCode)
         etServerUrl = findViewById(R.id.etServerUrl)
         etChildId = findViewById(R.id.etChildId)
         etDeviceName = findViewById(R.id.etDeviceName)
@@ -61,7 +77,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadPreferences() {
         val prefs = getSharedPreferences("pax_prefs", Context.MODE_PRIVATE)
-        etServerUrl.setText(prefs.getString("server_url", "https://pax-familia.your-subdomain.workers.dev"))
+        etServerUrl.setText(prefs.getString("server_url", "https://pax-familia.fly.dev"))
         etChildId.setText(prefs.getString("child_id", "child_1"))
         etDeviceName.setText(prefs.getString("device_name", Build.MODEL ?: "자녀 스마트폰"))
 
@@ -90,6 +106,70 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
+        btnPairWithCode.setOnClickListener {
+            val code = etPairingCode.text.toString().trim()
+            if (code.length != 6) {
+                Toast.makeText(this, "부모 대시보드의 6자리 코드를 입력하세요.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val serverUrl = etServerUrl.text.toString().trim()
+            val deviceName = etDeviceName.text.toString().trim()
+            val devType = if (rgDeviceType.checkedRadioButtonId == R.id.rbTablet) {
+                DeviceType.ANDROID_TABLET
+            } else {
+                DeviceType.ANDROID_PHONE
+            }
+
+            btnPairWithCode.isEnabled = false
+            btnPairWithCode.text = "연동 중..."
+
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val client = OkHttpClient.Builder().connectTimeout(5, TimeUnit.SECONDS).build()
+                    val reqJson = Gson().toJson(DeviceRegisterRequest(code, deviceName, devType))
+                    val body = reqJson.toRequestBody("application/json".toMediaType())
+                    val request = Request.Builder()
+                        .url("$serverUrl/api/devices/register")
+                        .post(body)
+                        .build()
+
+                    val response = client.newCall(request).execute()
+                    val respStr = response.body?.string() ?: ""
+                    val regResp = Gson().fromJson(respStr, DeviceRegisterResponse::class.java)
+
+                    withContext(Dispatchers.Main) {
+                        btnPairWithCode.isEnabled = true
+                        btnPairWithCode.text = "기기 등록"
+                        if (response.isSuccessful && regResp != null && regResp.success) {
+                            etChildId.setText(regResp.childId ?: "child_1")
+                            val prefs = getSharedPreferences("pax_prefs", Context.MODE_PRIVATE)
+                            prefs.edit()
+                                .putString("server_url", serverUrl)
+                                .putString("child_id", regResp.childId ?: "child_1")
+                                .putString("device_id", regResp.deviceId)
+                                .putString("device_name", deviceName)
+                                .putString("device_type", devType)
+                                .apply()
+
+                            Toast.makeText(
+                                this@MainActivity,
+                                "🎉 [등록 성공] 자녀 '${regResp.childName}'에게 연동되었습니다!",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        } else {
+                            val err = regResp?.error ?: "서버 응답 오류 (${response.code})"
+                            Toast.makeText(this@MainActivity, "등록 실패: $err", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        btnPairWithCode.isEnabled = true
+                        btnPairWithCode.text = "기기 등록"
+                        Toast.makeText(this@MainActivity, "통신 오류: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
         findViewById<Button>(R.id.btnReqUsage).setOnClickListener {
             startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
         }

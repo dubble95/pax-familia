@@ -43,11 +43,69 @@
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
+            <!-- 6자리 페어링 코드로 원클릭 간편 연동 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="#0F172A"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="✨ 6자리 페어링 코드로 간편 등록"
+                    android:textColor="#34D399"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="부모 대시보드의 [+ 새 기기 등록]에서 발급받은 6자리 숫자를 입력하세요:"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <EditText
+                        android:id="@+id/etPairingCode"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="#1E293B"
+                        android:hint="예: 834912"
+                        android:inputType="number"
+                        android:maxLength="6"
+                        android:padding="10dp"
+                        android:textColor="#FFFFFF"
+                        android:textColorHint="#475569"
+                        android:textSize="14sp" />
+
+                    <Button
+                        android:id="@+id/btnPairWithCode"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:backgroundTint="#059669"
+                        android:text="기기 등록"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="서버 URL (홈서버 또는 Cloudflare Workers):"
+                android:text="서버 URL (Fly.io 호스팅 주소):"
                 android:textColor="#CBD5E1"
                 android:textSize="12sp" />
 

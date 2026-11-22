@@ -27,15 +27,14 @@ type SimDevice struct {
 
 func main() {
 	serverURL := flag.String("server", "http://localhost:8080", "PaxFamilia 서버 URL")
+	pairingCode := flag.String("code", "", "부모 대시보드 6자리 페어링 코드 (신규 기기 등록 테스트)")
+	customName := flag.String("name", "신규 연동 테스트 기기", "등록할 기기 이름")
+	customType := flag.String("type", "android_phone", "기기 종류 (android_phone, android_tablet, windows_pc)")
 	flag.Parse()
 
 	log.Println("==========================================================")
-	log.Println("🎮 PaxFamilia 3대 기기 통합 가상 시뮬레이터 시작")
-	log.Println("   - 기기 1: 안드로이드 폰 (갤럭시 S24)")
-	log.Println("   - 기기 2: 안드로이드 태블릿 (갤럭시 탭 S9)")
-	log.Println("   - 기기 3: 윈도우 PC (거실 데스크톱)")
+	log.Println("🎮 PaxFamilia 가상 시뮬레이터 가동")
 	log.Printf("📡 서버 주소: %s", *serverURL)
-	log.Println("==========================================================")
 
 	devices := []*SimDevice{
 		{
@@ -60,6 +59,45 @@ func main() {
 			Active: false,
 		},
 	}
+
+	// 6자리 페어링 코드가 주어졌다면 신규 기기 등록 API 호출 테스트
+	if *pairingCode != "" {
+		regReq := shared.DeviceRegisterRequest{
+			PairingCode: *pairingCode,
+			DeviceName:  *customName,
+			DeviceType:  shared.DeviceType(*customType),
+		}
+		data, _ := json.Marshal(regReq)
+		resp, err := http.Post(*serverURL+"/api/devices/register", "application/json", bytes.NewReader(data))
+		if err != nil {
+			log.Fatalf("❌ 기기 등록 API 호출 실패: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			var errResp struct {
+				Error string `json:"error"`
+			}
+			_ = json.NewDecoder(resp.Body).Decode(&errResp)
+			log.Fatalf("❌ 기기 등록 거절됨: %s", errResp.Error)
+		}
+
+		var regResp shared.DeviceRegisterResponse
+		_ = json.NewDecoder(resp.Body).Decode(&regResp)
+		log.Printf("🎉 [기기 등록 성공] 자녀: %s | 기기 ID: %s | 기기명: %s", regResp.ChildName, regResp.DeviceID, *customName)
+
+		// 새 등록 기기를 단독 시뮬레이션 목록으로 교체
+		devices = []*SimDevice{
+			{
+				ID:     regResp.DeviceID,
+				Name:   *customName,
+				Type:   shared.DeviceType(*customType),
+				Apps:   []string{"YouTube", "EBS 초등", "카카오톡", "게임"},
+				Active: true,
+			},
+		}
+	}
+	log.Println("==========================================================")
 
 	client := &http.Client{Timeout: 3 * time.Second}
 	ticker := time.NewTicker(3 * time.Second)

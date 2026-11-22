@@ -50,6 +50,50 @@ type Device struct {
 	BatteryLevel int          `json:"battery_level"` // 배터리 잔량 (안드로이드)
 	LastSeen     time.Time    `json:"last_seen"`
 	UsedSeconds  int          `json:"used_seconds"`  // 오늘 이 기기에서 사용한 시간 (초)
+	CreatedAt    time.Time    `json:"created_at,omitempty"`
+}
+
+// DeviceRegisterRequest 기기 등록 요청 (페어링 코드 사용)
+type DeviceRegisterRequest struct {
+	PairingCode string     `json:"pairing_code"`
+	DeviceName  string     `json:"device_name"`
+	DeviceType  DeviceType `json:"device_type"`
+}
+
+// DeviceRegisterResponse 기기 등록 결과
+type DeviceRegisterResponse struct {
+	Success   bool   `json:"success"`
+	DeviceID  string `json:"device_id"`
+	ChildID   string `json:"child_id"`
+	ChildName string `json:"child_name"`
+	ServerURL string `json:"server_url"`
+	Error     string `json:"error,omitempty"`
+}
+
+// DeviceUnregisterRequest 기기 삭제/연동 해제 요청
+type DeviceUnregisterRequest struct {
+	DeviceID string `json:"device_id"`
+}
+
+// PairingCodeInfo 부모가 생성한 6자리 페어링 코드
+type PairingCodeInfo struct {
+	Code      string    `json:"code"`
+	ChildID   string    `json:"child_id"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// AuthLoginRequest 부모 로그인 요청
+type AuthLoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// AuthLoginResponse 부모 로그인 응답
+type AuthLoginResponse struct {
+	Success  bool   `json:"success"`
+	Token    string `json:"token"`
+	Username string `json:"username"`
+	Error    string `json:"error,omitempty"`
 }
 
 // HeartbeatRequest 클라이언트에서 10~30초마다 전송하는 요청

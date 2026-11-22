@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"flag"
@@ -8,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"pax-familia/shared"
@@ -159,11 +162,84 @@ func (a *WindowsAgent) sendHeartbeat(req shared.HeartbeatRequest) (*shared.Heart
 	return &res, nil
 }
 
+type DiskConfig struct {
+	ServerURL  string `json:"server_url"`
+	DeviceID   string `json:"device_id"`
+	ChildID    string `json:"child_id"`
+	DeviceName string `json:"device_name"`
+}
+
+func getConfigPath() string {
+	// 1. 현재 디렉토리 우선
+	if _, err := os.Stat("pax-config.json"); err == nil {
+		return "pax-config.json"
+	}
+	// 2. Windows %LocalAppData%\PaxFamilia\pax-config.json
+	localAppData := os.Getenv("LOCALAPPDATA")
+	if localAppData != "" {
+		p := filepath.Join(localAppData, "PaxFamilia", "pax-config.json")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	// 3. Windows %ProgramData%\PaxFamilia\pax-config.json
+	programData := os.Getenv("ProgramData")
+	if programData != "" {
+		p := filepath.Join(programData, "PaxFamilia", "pax-config.json")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return "pax-config.json"
+}
+
+func registerWithCode(serverURL, code, deviceName string) (*DiskConfig, error) {
+	reqBody := shared.DeviceRegisterRequest{
+		PairingCode: code,
+		DeviceName:  deviceName,
+		DeviceType:  shared.DeviceWindowsPC,
+	}
+	data, _ := json.Marshal(reqBody)
+	resp, err := http.Post(serverURL+"/api/devices/register", "application/json", bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("서버 연결 실패: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		return nil, fmt.Errorf("기기 등록 실패: %s", errResp.Error)
+	}
+
+	var regResp shared.DeviceRegisterResponse
+	if err := json.NewDecoder(resp.Body).Decode(&regResp); err != nil {
+		return nil, err
+	}
+
+	cfg := &DiskConfig{
+		ServerURL:  serverURL,
+		DeviceID:   regResp.DeviceID,
+		ChildID:    regResp.ChildID,
+		DeviceName: deviceName,
+	}
+
+	cfgPath := getConfigPath()
+	_ = os.MkdirAll(filepath.Dir(cfgPath), 0755)
+	cfgBytes, _ := json.MarshalIndent(cfg, "", "  ")
+	_ = os.WriteFile(cfgPath, cfgBytes, 0644)
+	log.Printf("🎉 [기기 등록 완료] 자녀 '%s'에 윈도우 PC가 연동되었습니다! (ID: %s)", regResp.ChildName, regResp.DeviceID)
+	return cfg, nil
+}
+
 func main() {
 	serverURL := flag.String("server", "http://localhost:8080", "PaxFamilia 서버 URL")
-	deviceID := flag.String("device-id", "dev_pc_1", "기기 고유 ID")
+	pairingCode := flag.String("code", "", "부모 대시보드에서 발급받은 6자리 페어링 코드")
+	deviceID := flag.String("device-id", "", "기기 고유 ID (생략 시 config 사용)")
 	deviceName := flag.String("name", "윈도우 PC", "기기 표시 이름")
-	childID := flag.String("child-id", "child_1", "자녀 ID")
+	childID := flag.String("child-id", "", "자녀 ID (생략 시 config 사용)")
 	intervalSec := flag.Int("interval", 15, "하트비트 주기(초)")
 	flag.Parse()
 
@@ -172,11 +248,76 @@ func main() {
 		*deviceName = fmt.Sprintf("PC (%s)", hostname)
 	}
 
+	cfgPath := getConfigPath()
+	var loadedCfg *DiskConfig
+
+	// 1. 이미 저장된 설정 파일이 있는지 확인
+	if data, err := os.ReadFile(cfgPath); err == nil {
+		var c DiskConfig
+		if json.Unmarshal(data, &c) == nil && c.DeviceID != "" {
+			loadedCfg = &c
+			log.Printf("📂 로컬 설정 로드 완료: %s (기기: %s)", cfgPath, c.DeviceName)
+		}
+	}
+
+	// 2. 페어링 코드가 명시된 경우 신규 등록 수행
+	if *pairingCode != "" {
+		newCfg, err := registerWithCode(*serverURL, *pairingCode, *deviceName)
+		if err != nil {
+			log.Fatalf("❌ 기기 등록 오류: %v", err)
+		}
+		loadedCfg = newCfg
+	} else if loadedCfg == nil && *deviceID == "" {
+		// 설정도 없고 device-id도 없고 코드도 없으면 대화형 입력 확인
+		log.Println("==================================================")
+		log.Println("💻 PaxFamilia 윈도우 PC 에이전트 초기 연동 마법사")
+		log.Println("==================================================")
+		fmt.Printf("부모 대시보드에서 발급받은 6자리 페어링 코드를 입력하세요: ")
+		reader := bufio.NewReader(os.Stdin)
+		code, _ := reader.ReadString('\n')
+		code = strings.TrimSpace(code)
+		if code != "" {
+			newCfg, err := registerWithCode(*serverURL, code, *deviceName)
+			if err != nil {
+				log.Fatalf("❌ 기기 등록 오류: %v", err)
+			}
+			loadedCfg = newCfg
+		}
+	}
+
+	// 3. 최종 설정 병합
+	finalServer := *serverURL
+	finalDevID := "dev_pc_1"
+	finalChildID := "child_1"
+	finalDevName := *deviceName
+
+	if loadedCfg != nil {
+		if loadedCfg.ServerURL != "" {
+			finalServer = loadedCfg.ServerURL
+		}
+		if loadedCfg.DeviceID != "" {
+			finalDevID = loadedCfg.DeviceID
+		}
+		if loadedCfg.ChildID != "" {
+			finalChildID = loadedCfg.ChildID
+		}
+		if loadedCfg.DeviceName != "" {
+			finalDevName = loadedCfg.DeviceName
+		}
+	}
+
+	if *deviceID != "" {
+		finalDevID = *deviceID
+	}
+	if *childID != "" {
+		finalChildID = *childID
+	}
+
 	agent := NewWindowsAgent(AgentConfig{
-		ServerURL:  *serverURL,
-		DeviceID:   *deviceID,
-		ChildID:    *childID,
-		DeviceName: *deviceName,
+		ServerURL:  finalServer,
+		DeviceID:   finalDevID,
+		ChildID:    finalChildID,
+		DeviceName: finalDevName,
 		Interval:   time.Duration(*intervalSec) * time.Second,
 	})
 

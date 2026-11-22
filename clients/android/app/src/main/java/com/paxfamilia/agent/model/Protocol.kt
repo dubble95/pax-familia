@@ -62,3 +62,17 @@ data class SystemStatus(
     @SerializedName("child") val child: Child?,
     @SerializedName("devices") val devices: List<Device>?
 )
+
+data class DeviceRegisterRequest(
+    @SerializedName("pairing_code") val pairingCode: String,
+    @SerializedName("device_name") val deviceName: String,
+    @SerializedName("device_type") val deviceType: String
+)
+
+data class DeviceRegisterResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("device_id") val deviceId: String?,
+    @SerializedName("child_id") val childId: String?,
+    @SerializedName("child_name") val childName: String?,
+    @SerializedName("error") val error: String?
+)

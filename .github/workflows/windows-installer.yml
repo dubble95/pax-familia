@@ -1,0 +1,84 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'clients/windows/**'
+      - 'shared/**'
+      - '.github/workflows/windows-installer.yml'
+  workflow_dispatch:
+
+jobs:
+  build-installer:
+    name: Build PaxFamilia Windows Installer (.exe & .zip)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build Windows Agent Executable
+        run: |
+          mkdir bin -ErrorAction SilentlyContinue
+          # Build with windowsgui subsystem so black cmd window does not pop up
+          go build -ldflags "-H=windowsgui -s -w" -o bin/pax-winagent.exe ./clients/windows
+        shell: pwsh
+
+      - name: Build NSIS Installer
+        run: |
+          cd clients/windows
+          makensis installer.nsi
+          Move-Item PaxFamiliaSetup.exe ../../bin/ -Force
+        shell: pwsh
+
+      - name: Create Portable Installer ZIP
+        run: |
+          $distDir = "dist\PaxFamilia-Windows-v1.0"
+          New-Item -ItemType Directory -Path $distDir -Force | Out-Null
+          Copy-Item bin\pax-winagent.exe $distDir\ -Force
+          Copy-Item bin\PaxFamiliaSetup.exe $distDir\ -Force
+          Copy-Item clients\windows\install.bat $distDir\ -Force
+          Copy-Item clients\windows\install.ps1 $distDir\ -Force
+          Copy-Item clients\windows\uninstall.bat $distDir\ -Force
+          
+          # Create README.txt
+          @"
+==========================================================
+🕊️ PaxFamilia (가정의 평화) 윈도우 에이전트 설치 패키지
+==========================================================
+
+[설치 방법 1 - GUI 설치 마법사]
+- PaxFamiliaSetup.exe 를 더블클릭하여 안내에 따라 설치합니다.
+
+[설치 방법 2 - 원클릭 스크립트]
+- install.bat 을 마우스 우클릭 -> [관리자 권한으로 실행] 합니다.
+- 부모 대시보드(https://pax-familia.fly.dev)의 [+ 새 기기 등록]에서
+  발급받은 6자리 페어링 코드를 입력하면 즉시 자녀 기기로 연동됩니다.
+
+[제거 방법]
+- 제어판 -> 프로그램 추가/제거에서 'PaxFamilia'를 제거하거나,
+  uninstall.bat 을 관리자 권한으로 실행합니다.
+"@ | Out-File -FilePath "$distDir\README.txt" -Encoding utf8
+
+          Compress-Archive -Path "$distDir\*" -DestinationPath "bin\PaxFamilia-Windows-Setup-v1.0.zip" -Force
+        shell: pwsh
+
+      - name: Upload Windows Installer (.exe)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PaxFamilia-Windows-Setup-Exe
+          path: bin/PaxFamiliaSetup.exe
+          retention-days: 14
+
+      - name: Upload Windows Full Package (.zip)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PaxFamilia-Windows-Package-Zip
+          path: bin/PaxFamilia-Windows-Setup-v1.0.zip
+          retention-days: 14

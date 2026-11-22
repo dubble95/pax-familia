@@ -263,6 +263,18 @@ export default {
           return copy;
         });
 
+      // ⭐️ 기기 순서 고정 정렬 (대시보드 순서 뒤바뀜 방지)
+      const typeRank = { 'android_phone': 1, 'android_tablet': 2, 'windows_pc': 3 };
+      devList.sort((a, b) => {
+        if (a.created_at && b.created_at && a.created_at !== b.created_at) {
+          return new Date(a.created_at) - new Date(b.created_at);
+        }
+        const r1 = typeRank[a.type] || 4;
+        const r2 = typeRank[b.type] || 4;
+        if (r1 !== r2) return r1 - r2;
+        return (a.id || '').localeCompare(b.id || '');
+      });
+
       return jsonResponse({
         child,
         devices: devList

@@ -351,3 +351,167 @@ func sendTelegram(token string, chatID int64, text string, isLocked bool) {
 	}
 	defer resp.Body.Close()
 }
+
+// HandleLogin 부모 로그인 처리
+func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req shared.AuthLoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	token, err := s.store.AuthenticateParent(req.Username, req.Password)
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(shared.AuthLoginResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(shared.AuthLoginResponse{
+		Success:  true,
+		Token:    token,
+		Username: req.Username,
+	})
+}
+
+// HandleLogout 부모 로그아웃
+func (s *Server) HandleLogout(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if strings.HasPrefix(token, "Bearer ") {
+		token = strings.TrimPrefix(token, "Bearer ")
+	}
+	if token == "" {
+		var payload struct {
+			Token string `json:"token"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&payload)
+		token = payload.Token
+	}
+
+	if token != "" {
+		s.store.InvalidateSession(token)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"success":true}`))
+}
+
+// HandleAuthCheck 세션 유효성 확인
+func (s *Server) HandleAuthCheck(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if strings.HasPrefix(token, "Bearer ") {
+		token = strings.TrimPrefix(token, "Bearer ")
+	}
+	if token == "" {
+		token = r.URL.Query().Get("token")
+	}
+
+	username, valid := s.store.ValidateSession(token)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"authenticated": valid,
+		"username":      username,
+	})
+}
+
+// HandleCreatePairingCode 대시보드에서 기기 등록용 6자리 핀코드 생성
+func (s *Server) HandleCreatePairingCode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var payload struct {
+		ChildID string `json:"child_id"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&payload)
+	if payload.ChildID == "" {
+		payload.ChildID = "child_1"
+	}
+
+	codeInfo, err := s.store.CreatePairingCode(payload.ChildID)
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":    true,
+		"code":       codeInfo.Code,
+		"child_id":   codeInfo.ChildID,
+		"expires_at": codeInfo.ExpiresAt,
+	})
+}
+
+// HandleRegisterDevice 기기(안드로이드/윈도우)에서 6자리 코드로 연동 등록
+func (s *Server) HandleRegisterDevice(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req shared.DeviceRegisterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	resp, err := s.store.RegisterDevice(req)
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(shared.DeviceRegisterResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// HandleDeleteDevice 기기 연동 해제 / 삭제
+func (s *Server) HandleDeleteDevice(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var payload struct {
+		DeviceID string `json:"device_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		payload.DeviceID = r.URL.Query().Get("device_id")
+	}
+
+	if payload.DeviceID == "" {
+		payload.DeviceID = r.URL.Query().Get("device_id")
+	}
+
+	if payload.DeviceID == "" {
+		http.Error(w, "device_id is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.store.DeleteDevice(payload.DeviceID); err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"success":true}`))
+}

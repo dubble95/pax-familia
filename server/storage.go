@@ -1,11 +1,16 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/big"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -25,11 +30,19 @@ type Store struct {
 	dirty    bool
 	stopCh   chan struct{}
 	doneCh   chan struct{}
+	sessions map[string]string // token -> username
 }
 
 type StoreData struct {
-	Children map[string]*shared.Child  `json:"children"`
-	Devices  map[string]*shared.Device `json:"devices"`
+	Children     map[string]*shared.Child           `json:"children"`
+	Devices      map[string]*shared.Device          `json:"devices"`
+	ParentUsers  map[string]string                  `json:"parent_users"` // username -> sha256 hex
+	PairingCodes map[string]*shared.PairingCodeInfo `json:"pairing_codes"`
+}
+
+func hashPassword(password string) string {
+	sum := sha256.Sum256([]byte(password))
+	return hex.EncodeToString(sum[:])
 }
 
 func NewStore(filePath string) (*Store, error) {
@@ -41,11 +54,14 @@ func NewStore(filePath string) (*Store, error) {
 	s := &Store{
 		filePath: filePath,
 		Data: StoreData{
-			Children: make(map[string]*shared.Child),
-			Devices:  make(map[string]*shared.Device),
+			Children:     make(map[string]*shared.Child),
+			Devices:      make(map[string]*shared.Device),
+			ParentUsers:  make(map[string]string),
+			PairingCodes: make(map[string]*shared.PairingCodeInfo),
 		},
-		stopCh: make(chan struct{}),
-		doneCh: make(chan struct{}),
+		stopCh:   make(chan struct{}),
+		doneCh:   make(chan struct{}),
+		sessions: make(map[string]string),
 	}
 
 	// 기존 데이터 파일 로드 또는 기본값 초기화
@@ -67,7 +83,8 @@ func NewStore(filePath string) (*Store, error) {
 		}
 		s.Data.Children[defaultChild.ID] = defaultChild
 
-		// 기본 대상 기기 3대 초기 등록
+		baseTime := time.Now().Add(-2 * time.Hour)
+		// 기본 대상 기기 3대 초기 등록 (등록 순서 보존)
 		s.Data.Devices["dev_phone_1"] = &shared.Device{
 			ID:         "dev_phone_1",
 			ChildID:    "child_1",
@@ -76,6 +93,7 @@ func NewStore(filePath string) (*Store, error) {
 			Status:     shared.StatusOffline,
 			CurrentApp: "대기 중",
 			LastSeen:   time.Now().Add(-1 * time.Hour),
+			CreatedAt:  baseTime,
 		}
 		s.Data.Devices["dev_tablet_1"] = &shared.Device{
 			ID:         "dev_tablet_1",
@@ -85,6 +103,7 @@ func NewStore(filePath string) (*Store, error) {
 			Status:     shared.StatusOffline,
 			CurrentApp: "대기 중",
 			LastSeen:   time.Now().Add(-1 * time.Hour),
+			CreatedAt:  baseTime.Add(1 * time.Minute),
 		}
 		s.Data.Devices["dev_pc_1"] = &shared.Device{
 			ID:         "dev_pc_1",
@@ -94,12 +113,33 @@ func NewStore(filePath string) (*Store, error) {
 			Status:     shared.StatusOffline,
 			CurrentApp: "대기 중",
 			LastSeen:   time.Now().Add(-1 * time.Hour),
+			CreatedAt:  baseTime.Add(2 * time.Minute),
 		}
+
+		s.Data.ParentUsers["admin"] = hashPassword("pax1234")
 
 		_ = s.saveDirect()
 	} else {
-		// 기존 데이터 파일이 로드되었을 때 Phase 3 필드가 비어있으면 기본값 보정
+		// 기존 데이터 파일이 로드되었을 때 보정
 		s.mu.Lock()
+		if s.Data.ParentUsers == nil {
+			s.Data.ParentUsers = make(map[string]string)
+		}
+		if len(s.Data.ParentUsers) == 0 {
+			s.Data.ParentUsers["admin"] = hashPassword("pax1234")
+			s.dirty = true
+		}
+		if s.Data.PairingCodes == nil {
+			s.Data.PairingCodes = make(map[string]*shared.PairingCodeInfo)
+		}
+		idx := 0
+		for _, dev := range s.Data.Devices {
+			if dev.CreatedAt.IsZero() {
+				dev.CreatedAt = time.Now().Add(-time.Duration(100-idx) * time.Hour)
+				idx++
+				s.dirty = true
+			}
+		}
 		for _, child := range s.Data.Children {
 			if len(child.WhitelistedApps) == 0 {
 				child.WhitelistedApps = DefaultWhitelistedApps
@@ -398,6 +438,35 @@ func (s *Store) GetStatus(childID string) shared.SystemStatus {
 		}
 	}
 
+	// ⭐️ 연동기기 순서 고정 (대시보드에서 순서가 바뀌지 않도록 정렬)
+	// 1) 등록일시(CreatedAt)가 다르면 등록일시 오름차순 (먼저 등록된 기기 우선)
+	// 2) 등록일시가 같거나 미지정이면 기기 유형 우선순위 (스마트폰 -> 태블릿 -> PC)
+	// 3) 그 외 ID 오름차순
+	sort.Slice(devList, func(i, j int) bool {
+		if !devList[i].CreatedAt.IsZero() && !devList[j].CreatedAt.IsZero() {
+			if !devList[i].CreatedAt.Equal(devList[j].CreatedAt) {
+				return devList[i].CreatedAt.Before(devList[j].CreatedAt)
+			}
+		}
+		typePriority := func(t shared.DeviceType) int {
+			switch t {
+			case shared.DeviceAndroidPhone:
+				return 1
+			case shared.DeviceAndroidTablet:
+				return 2
+			case shared.DeviceWindowsPC:
+				return 3
+			default:
+				return 4
+			}
+		}
+		p1, p2 := typePriority(devList[i].Type), typePriority(devList[j].Type)
+		if p1 != p2 {
+			return p1 < p2
+		}
+		return devList[i].ID < devList[j].ID
+	})
+
 	return shared.SystemStatus{
 		Child:   child,
 		Devices: devList,
@@ -526,4 +595,156 @@ func (s *Store) ResetToday(childID string) {
 		}
 		s.dirty = true
 	}
+}
+
+// AuthenticateParent 부모 로그인 인증 및 세션 토큰 발급
+func (s *Store) AuthenticateParent(username, password string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	expectedHash, exists := s.Data.ParentUsers[username]
+	if !exists {
+		return "", fmt.Errorf("존재하지 않는 부모 계정입니다")
+	}
+
+	if expectedHash != hashPassword(password) {
+		return "", fmt.Errorf("비밀번호가 올바르지 않습니다")
+	}
+
+	tokenBytes := make([]byte, 24)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return "", fmt.Errorf("세션 토큰 생성 실패: %v", err)
+	}
+	token := hex.EncodeToString(tokenBytes)
+	s.sessions[token] = username
+	return token, nil
+}
+
+// ValidateSession 부모 세션 토큰 유효성 검사
+func (s *Store) ValidateSession(token string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if token == "" {
+		return "", false
+	}
+	username, exists := s.sessions[token]
+	return username, exists
+}
+
+// InvalidateSession 부모 세션 만료 (로그아웃)
+func (s *Store) InvalidateSession(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.sessions, token)
+}
+
+// CreatePairingCode 부모 대시보드에서 6자리 기기 등록 코드 발급 (유효시간 15분)
+func (s *Store) CreatePairingCode(childID string) (*shared.PairingCodeInfo, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if childID == "" {
+		childID = "child_1"
+	}
+	if _, exists := s.Data.Children[childID]; !exists {
+		return nil, fmt.Errorf("자녀 ID(%s)를 찾을 수 없습니다", childID)
+	}
+
+	n, err := rand.Int(rand.Reader, big.NewInt(900000))
+	if err != nil {
+		return nil, err
+	}
+	code := fmt.Sprintf("%06d", n.Int64()+100000)
+	expiresAt := time.Now().Add(15 * time.Minute)
+
+	codeInfo := &shared.PairingCodeInfo{
+		Code:      code,
+		ChildID:   childID,
+		ExpiresAt: expiresAt,
+	}
+
+	if s.Data.PairingCodes == nil {
+		s.Data.PairingCodes = make(map[string]*shared.PairingCodeInfo)
+	}
+	s.Data.PairingCodes[code] = codeInfo
+	s.dirty = true
+
+	return codeInfo, nil
+}
+
+// RegisterDevice 6자리 코드로 실제 기기 등록
+func (s *Store) RegisterDevice(req shared.DeviceRegisterRequest) (*shared.DeviceRegisterResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	code := strings.TrimSpace(req.PairingCode)
+	codeInfo, exists := s.Data.PairingCodes[code]
+	if !exists {
+		return nil, fmt.Errorf("유효하지 않거나 존재하지 않는 6자리 페어링 코드입니다")
+	}
+
+	if time.Now().After(codeInfo.ExpiresAt) {
+		delete(s.Data.PairingCodes, code)
+		s.dirty = true
+		return nil, fmt.Errorf("페어링 코드가 만료되었습니다. 대시보드에서 새로 발급받으세요")
+	}
+
+	child, childExists := s.Data.Children[codeInfo.ChildID]
+	if !childExists {
+		return nil, fmt.Errorf("해당 코드에 연결된 자녀 계정이 없습니다")
+	}
+
+	devType := req.DeviceType
+	if devType == "" {
+		devType = shared.DeviceAndroidPhone
+	}
+	devName := strings.TrimSpace(req.DeviceName)
+	if devName == "" {
+		devName = fmt.Sprintf("새 %s 기기", devType)
+	}
+
+	devID := fmt.Sprintf("dev_%s_%d", devType, time.Now().Unix()%1000000)
+
+	newDev := &shared.Device{
+		ID:           devID,
+		ChildID:      child.ID,
+		Name:         devName,
+		Type:         devType,
+		Status:       shared.StatusOnline,
+		CurrentApp:   "연동 완료",
+		BatteryLevel: 100,
+		LastSeen:     time.Now(),
+		UsedSeconds:  0,
+		CreatedAt:    time.Now(),
+	}
+
+	if s.Data.Devices == nil {
+		s.Data.Devices = make(map[string]*shared.Device)
+	}
+	s.Data.Devices[devID] = newDev
+
+	// 코드 1회성 소모
+	delete(s.Data.PairingCodes, code)
+	s.dirty = true
+
+	return &shared.DeviceRegisterResponse{
+		Success:   true,
+		DeviceID:  devID,
+		ChildID:   child.ID,
+		ChildName: child.Name,
+	}, nil
+}
+
+// DeleteDevice 기기 등록 해제/삭제
+func (s *Store) DeleteDevice(deviceID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.Data.Devices[deviceID]; !exists {
+		return fmt.Errorf("해당 기기(%s)가 존재하지 않습니다", deviceID)
+	}
+
+	delete(s.Data.Devices, deviceID)
+	s.dirty = true
+	return nil
 }
