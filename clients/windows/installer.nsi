@@ -11,8 +11,6 @@ RequestExecutionLevel admin
 
 ; 현대적 UI 테마 설정
 !define MUI_ABORTWARNING
-!define MUI_ICON "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
-!define MUI_UNICON "${NSISDIR}\Contrib\Graphics\Icons\modern-uninstall.ico"
 
 ; 페이지 설정
 !insertmacro MUI_PAGE_WELCOME
