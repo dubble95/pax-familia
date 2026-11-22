@@ -21,9 +21,19 @@ const (
 	StatusLocked  DeviceStatus = "locked"
 )
 
+// User 부모 사용자 계정 모델 (Google OAuth 연동)
+type User struct {
+	ID        string    `json:"id"`        // Google sub 또는 고유 유저 ID
+	Email     string    `json:"email"`     // 구글 이메일
+	Name      string    `json:"name"`      // 이름 / 닉네임
+	Picture   string    `json:"picture"`   // 프로필 이미지 URL
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // Child 자녀 정보 모델
 type Child struct {
 	ID                string    `json:"id"`
+	UserID            string    `json:"user_id,omitempty"`   // 소속된 부모 사용자 ID
 	Name              string    `json:"name"`
 	DailyQuotaMinutes int       `json:"daily_quota_minutes"` // 일일 기본 스크린타임 (분)
 	BonusMinutes      int       `json:"bonus_minutes"`       // 오늘 지급된 추가 보너스 시간 (분)
@@ -43,13 +53,14 @@ type Child struct {
 type Device struct {
 	ID           string       `json:"id"`
 	ChildID      string       `json:"child_id"`
-	Name         string       `json:"name"`         // 예: "민우의 갤럭시폰", "공용 갤럭시탭", "민우 PC"
-	Type         DeviceType   `json:"type"`         // android_phone, android_tablet, windows_pc
-	Status       DeviceStatus `json:"status"`       // online, idle, locked, offline
-	CurrentApp   string       `json:"current_app"`   // 현재 활성화된 앱 또는 창 제목
-	BatteryLevel int          `json:"battery_level"` // 배터리 잔량 (안드로이드)
+	UserID       string       `json:"user_id,omitempty"` // 소속된 부모 사용자 ID
+	Name         string       `json:"name"`              // 예: "민우의 갤럭시폰", "공용 갤럭시탭", "민우 PC"
+	Type         DeviceType   `json:"type"`              // android_phone, android_tablet, windows_pc
+	Status       DeviceStatus `json:"status"`            // online, idle, locked, offline
+	CurrentApp   string       `json:"current_app"`        // 현재 활성화된 앱 또는 창 제목
+	BatteryLevel int          `json:"battery_level"`      // 배터리 잔량 (안드로이드)
 	LastSeen     time.Time    `json:"last_seen"`
-	UsedSeconds  int          `json:"used_seconds"`  // 오늘 이 기기에서 사용한 시간 (초)
+	UsedSeconds  int          `json:"used_seconds"`       // 오늘 이 기기에서 사용한 시간 (초)
 	CreatedAt    time.Time    `json:"created_at,omitempty"`
 }
 
@@ -78,8 +89,25 @@ type DeviceUnregisterRequest struct {
 // PairingCodeInfo 부모가 생성한 6자리 페어링 코드
 type PairingCodeInfo struct {
 	Code      string    `json:"code"`
+	UserID    string    `json:"user_id,omitempty"`
 	ChildID   string    `json:"child_id"`
 	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// GoogleAuthRequest Google OAuth 로그인 요청
+type GoogleAuthRequest struct {
+	Credential string `json:"credential,omitempty"` // Google Identity Services JWT
+	Email      string `json:"email,omitempty"`      // 계정 이메일
+	Name       string `json:"name,omitempty"`       // 사용자 이름
+	Picture    string `json:"picture,omitempty"`    // 프로필 사진 URL
+}
+
+// GoogleAuthResponse Google 로그인 응답
+type GoogleAuthResponse struct {
+	Success bool   `json:"success"`
+	Token   string `json:"token"`
+	User    *User  `json:"user,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 // AuthLoginRequest 부모 로그인 요청
@@ -121,6 +149,7 @@ type HeartbeatResponse struct {
 
 // SystemStatus 부모 대시보드 및 텔레그램용 종합 상태
 type SystemStatus struct {
+	User    *User    `json:"user,omitempty"`
 	Child   *Child   `json:"child"`
 	Devices []Device `json:"devices"`
 }

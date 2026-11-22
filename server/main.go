@@ -59,9 +59,15 @@ func main() {
 	mux := http.NewServeMux()
 
 	// API 엔드포인트
+	mux.HandleFunc("/api/auth/google", srv.HandleGoogleLogin)
 	mux.HandleFunc("/api/auth/login", srv.HandleLogin)
 	mux.HandleFunc("/api/auth/logout", srv.HandleLogout)
 	mux.HandleFunc("/api/auth/check", srv.HandleAuthCheck)
+
+	// 클라이언트 다운로드 엔드포인트
+	mux.HandleFunc("/download/windows", srv.HandleDownloadWindows)
+	mux.HandleFunc("/download/windows-zip", srv.HandleDownloadWindowsZip)
+	mux.HandleFunc("/download/android", srv.HandleDownloadAndroid)
 
 	mux.HandleFunc("/api/devices/pairing-code", srv.HandleCreatePairingCode)
 	mux.HandleFunc("/api/devices/register", srv.HandleRegisterDevice)

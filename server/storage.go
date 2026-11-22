@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -30,10 +31,11 @@ type Store struct {
 	dirty    bool
 	stopCh   chan struct{}
 	doneCh   chan struct{}
-	sessions map[string]string // token -> username
+	sessions map[string]*shared.User // token -> User
 }
 
 type StoreData struct {
+	Users        map[string]*shared.User            `json:"users"`
 	Children     map[string]*shared.Child           `json:"children"`
 	Devices      map[string]*shared.Device          `json:"devices"`
 	ParentUsers  map[string]string                  `json:"parent_users"` // username -> sha256 hex
@@ -54,6 +56,7 @@ func NewStore(filePath string) (*Store, error) {
 	s := &Store{
 		filePath: filePath,
 		Data: StoreData{
+			Users:        make(map[string]*shared.User),
 			Children:     make(map[string]*shared.Child),
 			Devices:      make(map[string]*shared.Device),
 			ParentUsers:  make(map[string]string),
@@ -61,7 +64,7 @@ func NewStore(filePath string) (*Store, error) {
 		},
 		stopCh:   make(chan struct{}),
 		doneCh:   make(chan struct{}),
-		sessions: make(map[string]string),
+		sessions: make(map[string]*shared.User),
 	}
 
 	// 기존 데이터 파일 로드 또는 기본값 초기화
@@ -69,6 +72,7 @@ func NewStore(filePath string) (*Store, error) {
 		today := time.Now().Format("2006-01-02")
 		defaultChild := &shared.Child{
 			ID:                "child_1",
+			UserID:            "admin",
 			Name:              "우리 아이",
 			DailyQuotaMinutes: 120, // 하루 2시간
 			BonusMinutes:      0,
@@ -88,6 +92,7 @@ func NewStore(filePath string) (*Store, error) {
 		s.Data.Devices["dev_phone_1"] = &shared.Device{
 			ID:         "dev_phone_1",
 			ChildID:    "child_1",
+			UserID:     "admin",
 			Name:       "안드로이드 스마트폰",
 			Type:       shared.DeviceAndroidPhone,
 			Status:     shared.StatusOffline,
@@ -98,6 +103,7 @@ func NewStore(filePath string) (*Store, error) {
 		s.Data.Devices["dev_tablet_1"] = &shared.Device{
 			ID:         "dev_tablet_1",
 			ChildID:    "child_1",
+			UserID:     "admin",
 			Name:       "안드로이드 태블릿",
 			Type:       shared.DeviceAndroidTablet,
 			Status:     shared.StatusOffline,
@@ -108,6 +114,7 @@ func NewStore(filePath string) (*Store, error) {
 		s.Data.Devices["dev_pc_1"] = &shared.Device{
 			ID:         "dev_pc_1",
 			ChildID:    "child_1",
+			UserID:     "admin",
 			Name:       "윈도우 PC",
 			Type:       shared.DeviceWindowsPC,
 			Status:     shared.StatusOffline,
@@ -117,11 +124,30 @@ func NewStore(filePath string) (*Store, error) {
 		}
 
 		s.Data.ParentUsers["admin"] = hashPassword("pax1234")
+		s.Data.Users["admin"] = &shared.User{
+			ID:        "admin",
+			Email:     "admin@paxfamilia.com",
+			Name:      "관리자 (부모)",
+			Picture:   "",
+			CreatedAt: time.Now(),
+		}
 
 		_ = s.saveDirect()
 	} else {
 		// 기존 데이터 파일이 로드되었을 때 보정
 		s.mu.Lock()
+		if s.Data.Users == nil {
+			s.Data.Users = make(map[string]*shared.User)
+		}
+		if _, ok := s.Data.Users["admin"]; !ok {
+			s.Data.Users["admin"] = &shared.User{
+				ID:        "admin",
+				Email:     "admin@paxfamilia.com",
+				Name:      "관리자 (부모)",
+				Picture:   "",
+				CreatedAt: time.Now(),
+			}
+		}
 		if s.Data.ParentUsers == nil {
 			s.Data.ParentUsers = make(map[string]string)
 		}
@@ -131,6 +157,16 @@ func NewStore(filePath string) (*Store, error) {
 		}
 		if s.Data.PairingCodes == nil {
 			s.Data.PairingCodes = make(map[string]*shared.PairingCodeInfo)
+		}
+		if c, ok := s.Data.Children["child_1"]; ok && c.UserID == "" {
+			c.UserID = "admin"
+			s.dirty = true
+		}
+		for _, dev := range s.Data.Devices {
+			if dev.ChildID == "child_1" && dev.UserID == "" {
+				dev.UserID = "admin"
+				s.dirty = true
+			}
 		}
 		idx := 0
 		for _, dev := range s.Data.Devices {
@@ -399,37 +435,86 @@ func (s *Store) ProcessHeartbeat(req shared.HeartbeatRequest) shared.HeartbeatRe
 	}
 }
 
-// GetStatus 전체 현황 반환
-func (s *Store) GetStatus(childID string) shared.SystemStatus {
+// GetStatus 전체 현황 반환 (사용자별 멀티테넌시 격리)
+func (s *Store) GetStatus(user *shared.User, childID string) shared.SystemStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if childID == "" {
-		childID = "child_1"
-	}
+	var child *shared.Child
 
-	child, exists := s.Data.Children[childID]
-	if !exists {
-		today := time.Now().Format("2006-01-02")
-		child = &shared.Child{
-			ID:                childID,
-			Name:              "우리 아이",
-			DailyQuotaMinutes: 120,
-			LastResetDate:     today,
-			BedtimeEnabled:    false,
-			BedtimeStart:      "22:00",
-			BedtimeEnd:        "07:00",
-			WhitelistedApps:   DefaultWhitelistedApps,
+	if user != nil {
+		// 1. 해당 Google 계정 사용자에게 소속된 자녀 탐색
+		for _, c := range s.Data.Children {
+			if c.UserID == user.ID {
+				if childID == "" || c.ID == childID {
+					child = c
+					break
+				}
+			}
 		}
-		s.Data.Children[childID] = child
-		s.dirty = true
+		// 자녀가 없으면 자동 생성
+		if child == nil {
+			cid := fmt.Sprintf("child_%s", user.ID)
+			childName := fmt.Sprintf("%s의 자녀", user.Name)
+			if strings.TrimSpace(user.Name) == "" {
+				childName = "우리 아이"
+			}
+			child = &shared.Child{
+				ID:                cid,
+				UserID:            user.ID,
+				Name:              childName,
+				DailyQuotaMinutes: 120,
+				LastResetDate:     time.Now().Format("2006-01-02"),
+				BedtimeEnabled:    false,
+				BedtimeStart:      "22:00",
+				BedtimeEnd:        "07:00",
+				WhitelistedApps:   DefaultWhitelistedApps,
+				UpdatedAt:         time.Now(),
+			}
+			s.Data.Children[cid] = child
+			s.dirty = true
+		}
+	} else {
+		// 비로그인 / 기본 하위 호환
+		if childID == "" {
+			childID = "child_1"
+		}
+		var exists bool
+		child, exists = s.Data.Children[childID]
+		if !exists {
+			today := time.Now().Format("2006-01-02")
+			child = &shared.Child{
+				ID:                childID,
+				Name:              "우리 아이",
+				DailyQuotaMinutes: 120,
+				LastResetDate:     today,
+				BedtimeEnabled:    false,
+				BedtimeStart:      "22:00",
+				BedtimeEnd:        "07:00",
+				WhitelistedApps:   DefaultWhitelistedApps,
+			}
+			s.Data.Children[childID] = child
+			s.dirty = true
+		}
 	}
 	s.checkDailyReset(child)
 
 	now := time.Now()
 	var devList []shared.Device
 	for _, dev := range s.Data.Devices {
-		if dev.ChildID == childID {
+		belongs := false
+		if user != nil {
+			// Google 사용자 격리: 자신의 자녀 기기이거나 자신의 유저ID에 바인딩된 기기
+			if dev.UserID == user.ID || dev.ChildID == child.ID {
+				belongs = true
+			}
+		} else {
+			if dev.ChildID == child.ID {
+				belongs = true
+			}
+		}
+
+		if belongs {
 			dCopy := *dev
 			if now.Sub(dCopy.LastSeen) > 60*time.Second {
 				dCopy.Status = shared.StatusOffline
@@ -468,9 +553,58 @@ func (s *Store) GetStatus(childID string) shared.SystemStatus {
 	})
 
 	return shared.SystemStatus{
+		User:    user,
 		Child:   child,
 		Devices: devList,
 	}
+}
+
+// ResolveChildID 사용자의 자녀 ID를 반환 (인증된 사용자의 자녀 ID 우선 조회)
+func (s *Store) ResolveChildID(user *shared.User, explicitID string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if user != nil {
+		if explicitID != "" {
+			if c, exists := s.Data.Children[explicitID]; exists && (c.UserID == user.ID || c.UserID == "") {
+				return explicitID
+			}
+		}
+		for _, c := range s.Data.Children {
+			if c.UserID == user.ID {
+				return c.ID
+			}
+		}
+		// 자녀 계정이 없는 경우 신규 생성
+		cid := fmt.Sprintf("child_%s", user.ID)
+		childName := fmt.Sprintf("%s의 자녀", user.Name)
+		if strings.TrimSpace(user.Name) == "" {
+			childName = "우리 아이"
+		}
+		c := &shared.Child{
+			ID:                cid,
+			UserID:            user.ID,
+			Name:              childName,
+			DailyQuotaMinutes: 120,
+			LastResetDate:     time.Now().Format("2006-01-02"),
+			BedtimeEnabled:    false,
+			BedtimeStart:      "22:00",
+			BedtimeEnd:        "07:00",
+			WhitelistedApps:   DefaultWhitelistedApps,
+			UpdatedAt:         time.Now(),
+		}
+		if s.Data.Children == nil {
+			s.Data.Children = make(map[string]*shared.Child)
+		}
+		s.Data.Children[cid] = c
+		s.dirty = true
+		return cid
+	}
+
+	if explicitID != "" {
+		return explicitID
+	}
+	return "child_1"
 }
 
 // AddBonus 보너스 시간 추가
@@ -597,38 +731,178 @@ func (s *Store) ResetToday(childID string) {
 	}
 }
 
+// parseGoogleJWT Google Identity Services ID 토큰 디코딩
+func parseGoogleJWT(credential string) (sub, email, name, picture string, err error) {
+	parts := strings.Split(credential, ".")
+	if len(parts) < 2 {
+		return "", "", "", "", fmt.Errorf("올바르지 않은 JWT 토큰 형식입니다")
+	}
+
+	payloadSeg := parts[1]
+	switch len(payloadSeg) % 4 {
+	case 2:
+		payloadSeg += "=="
+	case 3:
+		payloadSeg += "="
+	}
+
+	decoded, err := base64.URLEncoding.DecodeString(payloadSeg)
+	if err != nil {
+		decoded, err = base64.RawURLEncoding.DecodeString(parts[1])
+		if err != nil {
+			return "", "", "", "", fmt.Errorf("JWT 디코딩 실패: %v", err)
+		}
+	}
+
+	var claims struct {
+		Sub     string `json:"sub"`
+		Email   string `json:"email"`
+		Name    string `json:"name"`
+		Picture string `json:"picture"`
+	}
+	if err := json.Unmarshal(decoded, &claims); err != nil {
+		return "", "", "", "", fmt.Errorf("토큰 정보 파싱 실패: %v", err)
+	}
+
+	if claims.Sub == "" && claims.Email == "" {
+		return "", "", "", "", fmt.Errorf("유효한 Google 사용자 식별자가 없습니다")
+	}
+
+	sub = claims.Sub
+	if sub == "" {
+		sub = fmt.Sprintf("google_%x", sha256.Sum256([]byte(claims.Email)))[:16]
+	}
+	return sub, claims.Email, claims.Name, claims.Picture, nil
+}
+
+// AuthenticateGoogle Google OAuth 로그인 처리 및 세션 발급
+func (s *Store) AuthenticateGoogle(req shared.GoogleAuthRequest) (string, *shared.User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var sub, email, name, picture string
+	var err error
+
+	if req.Credential != "" {
+		sub, email, name, picture, err = parseGoogleJWT(req.Credential)
+		if err != nil {
+			return "", nil, err
+		}
+	} else if req.Email != "" {
+		email = strings.TrimSpace(req.Email)
+		sub = fmt.Sprintf("google_%x", sha256.Sum256([]byte(email)))[:16]
+		name = strings.TrimSpace(req.Name)
+		if name == "" {
+			name = strings.Split(email, "@")[0]
+		}
+		picture = req.Picture
+	} else {
+		return "", nil, fmt.Errorf("Google 계정 정보가 누락되었습니다")
+	}
+
+	if s.Data.Users == nil {
+		s.Data.Users = make(map[string]*shared.User)
+	}
+
+	user, exists := s.Data.Users[sub]
+	if !exists {
+		user = &shared.User{
+			ID:        sub,
+			Email:     email,
+			Name:      name,
+			Picture:   picture,
+			CreatedAt: time.Now(),
+		}
+		s.Data.Users[sub] = user
+
+		// 신규 부모 사용자를 위한 격리된 자녀 계정 자동 생성
+		childID := fmt.Sprintf("child_%s", sub)
+		childName := fmt.Sprintf("%s의 자녀", name)
+		if strings.TrimSpace(name) == "" {
+			childName = "우리 아이"
+		}
+		newChild := &shared.Child{
+			ID:                childID,
+			UserID:            sub,
+			Name:              childName,
+			DailyQuotaMinutes: 120,
+			BonusMinutes:      0,
+			UsedSeconds:       0,
+			ForceLocked:       false,
+			LastResetDate:     time.Now().Format("2006-01-02"),
+			UpdatedAt:         time.Now(),
+			BedtimeEnabled:    false,
+			BedtimeStart:      "22:00",
+			BedtimeEnd:        "07:00",
+			WhitelistedApps:   DefaultWhitelistedApps,
+		}
+		s.Data.Children[childID] = newChild
+		s.dirty = true
+	} else {
+		if name != "" {
+			user.Name = name
+		}
+		if picture != "" {
+			user.Picture = picture
+		}
+	}
+
+	tokenBytes := make([]byte, 24)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return "", nil, fmt.Errorf("세션 토큰 생성 실패: %v", err)
+	}
+	token := hex.EncodeToString(tokenBytes)
+	s.sessions[token] = user
+
+	return token, user, nil
+}
+
 // AuthenticateParent 부모 로그인 인증 및 세션 토큰 발급
-func (s *Store) AuthenticateParent(username, password string) (string, error) {
+func (s *Store) AuthenticateParent(username, password string) (string, *shared.User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	expectedHash, exists := s.Data.ParentUsers[username]
 	if !exists {
-		return "", fmt.Errorf("존재하지 않는 부모 계정입니다")
+		return "", nil, fmt.Errorf("존재하지 않는 부모 계정입니다")
 	}
 
 	if expectedHash != hashPassword(password) {
-		return "", fmt.Errorf("비밀번호가 올바르지 않습니다")
+		return "", nil, fmt.Errorf("비밀번호가 올바르지 않습니다")
+	}
+
+	user, userExists := s.Data.Users[username]
+	if !userExists {
+		user = &shared.User{
+			ID:        username,
+			Email:     username + "@paxfamilia.com",
+			Name:      username + " (부모)",
+			CreatedAt: time.Now(),
+		}
+		if s.Data.Users == nil {
+			s.Data.Users = make(map[string]*shared.User)
+		}
+		s.Data.Users[username] = user
 	}
 
 	tokenBytes := make([]byte, 24)
 	if _, err := rand.Read(tokenBytes); err != nil {
-		return "", fmt.Errorf("세션 토큰 생성 실패: %v", err)
+		return "", nil, fmt.Errorf("세션 토큰 생성 실패: %v", err)
 	}
 	token := hex.EncodeToString(tokenBytes)
-	s.sessions[token] = username
-	return token, nil
+	s.sessions[token] = user
+	return token, user, nil
 }
 
 // ValidateSession 부모 세션 토큰 유효성 검사
-func (s *Store) ValidateSession(token string) (string, bool) {
+func (s *Store) ValidateSession(token string) (*shared.User, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if token == "" {
-		return "", false
+		return nil, false
 	}
-	username, exists := s.sessions[token]
-	return username, exists
+	user, exists := s.sessions[token]
+	return user, exists
 }
 
 // InvalidateSession 부모 세션 만료 (로그아웃)
@@ -639,10 +913,22 @@ func (s *Store) InvalidateSession(token string) {
 }
 
 // CreatePairingCode 부모 대시보드에서 6자리 기기 등록 코드 발급 (유효시간 15분)
-func (s *Store) CreatePairingCode(childID string) (*shared.PairingCodeInfo, error) {
+func (s *Store) CreatePairingCode(user *shared.User, childID string) (*shared.PairingCodeInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	userID := ""
+	if user != nil {
+		userID = user.ID
+		if childID == "" {
+			for _, c := range s.Data.Children {
+				if c.UserID == user.ID {
+					childID = c.ID
+					break
+				}
+			}
+		}
+	}
 	if childID == "" {
 		childID = "child_1"
 	}
@@ -659,6 +945,7 @@ func (s *Store) CreatePairingCode(childID string) (*shared.PairingCodeInfo, erro
 
 	codeInfo := &shared.PairingCodeInfo{
 		Code:      code,
+		UserID:    userID,
 		ChildID:   childID,
 		ExpiresAt: expiresAt,
 	}
@@ -708,6 +995,7 @@ func (s *Store) RegisterDevice(req shared.DeviceRegisterRequest) (*shared.Device
 	newDev := &shared.Device{
 		ID:           devID,
 		ChildID:      child.ID,
+		UserID:       codeInfo.UserID, // ⭐️ 부모 Google 계정과 바인딩
 		Name:         devName,
 		Type:         devType,
 		Status:       shared.StatusOnline,
@@ -736,12 +1024,19 @@ func (s *Store) RegisterDevice(req shared.DeviceRegisterRequest) (*shared.Device
 }
 
 // DeleteDevice 기기 등록 해제/삭제
-func (s *Store) DeleteDevice(deviceID string) error {
+func (s *Store) DeleteDevice(user *shared.User, deviceID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, exists := s.Data.Devices[deviceID]; !exists {
+	dev, exists := s.Data.Devices[deviceID]
+	if !exists {
 		return fmt.Errorf("해당 기기(%s)가 존재하지 않습니다", deviceID)
+	}
+
+	if user != nil {
+		if dev.UserID != "" && dev.UserID != user.ID {
+			return fmt.Errorf("해당 기기를 삭제할 권한이 없습니다")
+		}
 	}
 
 	delete(s.Data.Devices, deviceID)

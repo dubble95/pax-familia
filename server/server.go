@@ -39,14 +39,36 @@ func (s *Server) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// HandleStatus 전체 상태 조회
+func (s *Server) getUserFromRequest(r *http.Request) *shared.User {
+	token := r.Header.Get("Authorization")
+	if strings.HasPrefix(token, "Bearer ") {
+		token = strings.TrimPrefix(token, "Bearer ")
+	}
+	if token == "" {
+		token = r.URL.Query().Get("token")
+	}
+	if token == "" {
+		return nil
+	}
+	user, _ := s.store.ValidateSession(token)
+	return user
+}
+
+// HandleStatus 전체 상태 조회 (Google 계정별 멀티테넌시 격리)
 func (s *Server) HandleStatus(w http.ResponseWriter, r *http.Request) {
-	childID := r.URL.Query().Get("child_id")
-	if childID == "" {
-		childID = "child_1"
+	user := s.getUserFromRequest(r)
+	if user == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"authenticated": false,
+			"error":         "로그인이 필요합니다",
+		})
+		return
 	}
 
-	status := s.store.GetStatus(childID)
+	childID := r.URL.Query().Get("child_id")
+	status := s.store.GetStatus(user, childID)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(status)
@@ -59,6 +81,12 @@ func (s *Server) HandleLock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user := s.getUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var payload struct {
 		ChildID string `json:"child_id"`
 		Lock    bool   `json:"lock"`
@@ -68,11 +96,8 @@ func (s *Server) HandleLock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if payload.ChildID == "" {
-		payload.ChildID = "child_1"
-	}
-
-	s.store.SetForceLock(payload.ChildID, payload.Lock)
+	childID := s.store.ResolveChildID(user, payload.ChildID)
+	s.store.SetForceLock(childID, payload.Lock)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"success":true}`))
 }
@@ -84,6 +109,12 @@ func (s *Server) HandleBonus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user := s.getUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var payload struct {
 		ChildID string `json:"child_id"`
 		Minutes int    `json:"minutes"`
@@ -93,11 +124,8 @@ func (s *Server) HandleBonus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if payload.ChildID == "" {
-		payload.ChildID = "child_1"
-	}
-
-	s.store.AddBonus(payload.ChildID, payload.Minutes)
+	childID := s.store.ResolveChildID(user, payload.ChildID)
+	s.store.AddBonus(childID, payload.Minutes)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"success":true}`))
 }
@@ -109,6 +137,12 @@ func (s *Server) HandleQuota(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user := s.getUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var payload struct {
 		ChildID string `json:"child_id"`
 		Minutes int    `json:"minutes"`
@@ -118,15 +152,12 @@ func (s *Server) HandleQuota(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if payload.ChildID == "" {
-		payload.ChildID = "child_1"
-	}
-
+	childID := s.store.ResolveChildID(user, payload.ChildID)
 	if payload.Minutes <= 0 {
 		payload.Minutes = 60
 	}
 
-	s.store.SetDailyQuota(payload.ChildID, payload.Minutes)
+	s.store.SetDailyQuota(childID, payload.Minutes)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"success":true}`))
 }
@@ -135,6 +166,12 @@ func (s *Server) HandleQuota(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleBedtime(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	user := s.getUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -149,11 +186,8 @@ func (s *Server) HandleBedtime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if payload.ChildID == "" {
-		payload.ChildID = "child_1"
-	}
-
-	s.store.SetBedtime(payload.ChildID, payload.Enabled, payload.Start, payload.End)
+	childID := s.store.ResolveChildID(user, payload.ChildID)
+	s.store.SetBedtime(childID, payload.Enabled, payload.Start, payload.End)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"success":true}`))
 }
@@ -162,6 +196,12 @@ func (s *Server) HandleBedtime(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleWhitelist(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	user := s.getUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -176,20 +216,17 @@ func (s *Server) HandleWhitelist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if payload.ChildID == "" {
-		payload.ChildID = "child_1"
-	}
-
+	childID := s.store.ResolveChildID(user, payload.ChildID)
 	switch payload.Action {
 	case "add":
-		s.store.AddWhitelistedApp(payload.ChildID, payload.App)
+		s.store.AddWhitelistedApp(childID, payload.App)
 	case "remove":
-		s.store.RemoveWhitelistedApp(payload.ChildID, payload.App)
+		s.store.RemoveWhitelistedApp(childID, payload.App)
 	case "set":
-		s.store.SetWhitelistedApps(payload.ChildID, payload.Apps)
+		s.store.SetWhitelistedApps(childID, payload.Apps)
 	default:
 		if payload.App != "" {
-			s.store.AddWhitelistedApp(payload.ChildID, payload.App)
+			s.store.AddWhitelistedApp(childID, payload.App)
 		}
 	}
 
@@ -199,10 +236,13 @@ func (s *Server) HandleWhitelist(w http.ResponseWriter, r *http.Request) {
 
 // HandleResetToday 오늘 사용량 초기화
 func (s *Server) HandleResetToday(w http.ResponseWriter, r *http.Request) {
-	childID := r.URL.Query().Get("child_id")
-	if childID == "" {
-		childID = "child_1"
+	user := s.getUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
 	}
+
+	childID := s.store.ResolveChildID(user, r.URL.Query().Get("child_id"))
 	s.store.ResetToday(childID)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"success":true}`))
@@ -268,7 +308,7 @@ func (s *Server) HandleTelegram(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 상태 조회 및 명령 처리
-	status := s.store.GetStatus("child_1")
+	status := s.store.GetStatus(nil, "child_1")
 	child := status.Child
 	totalAllowed := (child.DailyQuotaMinutes + child.BonusMinutes) * 60
 	remSec := totalAllowed - child.UsedSeconds
@@ -352,7 +392,38 @@ func sendTelegram(token string, chatID int64, text string, isLocked bool) {
 	defer resp.Body.Close()
 }
 
-// HandleLogin 부모 로그인 처리
+// HandleGoogleLogin Google OAuth 로그인 처리
+func (s *Server) HandleGoogleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req shared.GoogleAuthRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	token, user, err := s.store.AuthenticateGoogle(req)
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(shared.GoogleAuthResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(shared.GoogleAuthResponse{
+		Success: true,
+		Token:   token,
+		User:    user,
+	})
+}
+
+// HandleLogin 부모 로그인 처리 (아이디/비밀번호)
 func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -365,7 +436,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := s.store.AuthenticateParent(req.Username, req.Password)
+	token, user, err := s.store.AuthenticateParent(req.Username, req.Password)
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -379,7 +450,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(shared.AuthLoginResponse{
 		Success:  true,
 		Token:    token,
-		Username: req.Username,
+		Username: user.Name,
 	})
 }
 
@@ -407,20 +478,19 @@ func (s *Server) HandleLogout(w http.ResponseWriter, r *http.Request) {
 
 // HandleAuthCheck 세션 유효성 확인
 func (s *Server) HandleAuthCheck(w http.ResponseWriter, r *http.Request) {
-	token := r.Header.Get("Authorization")
-	if strings.HasPrefix(token, "Bearer ") {
-		token = strings.TrimPrefix(token, "Bearer ")
-	}
-	if token == "" {
-		token = r.URL.Query().Get("token")
-	}
-
-	username, valid := s.store.ValidateSession(token)
+	user := s.getUserFromRequest(r)
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"authenticated": valid,
-		"username":      username,
-	})
+	if user != nil {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"authenticated": true,
+			"user":          user,
+			"username":      user.Name,
+		})
+	} else {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"authenticated": false,
+		})
+	}
 }
 
 // HandleCreatePairingCode 대시보드에서 기기 등록용 6자리 핀코드 생성
@@ -430,15 +500,19 @@ func (s *Server) HandleCreatePairingCode(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	user := s.getUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var payload struct {
 		ChildID string `json:"child_id"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&payload)
-	if payload.ChildID == "" {
-		payload.ChildID = "child_1"
-	}
 
-	codeInfo, err := s.store.CreatePairingCode(payload.ChildID)
+	childID := s.store.ResolveChildID(user, payload.ChildID)
+	codeInfo, err := s.store.CreatePairingCode(user, childID)
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -491,6 +565,12 @@ func (s *Server) HandleDeleteDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user := s.getUserFromRequest(r)
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var payload struct {
 		DeviceID string `json:"device_id"`
 	}
@@ -507,11 +587,33 @@ func (s *Server) HandleDeleteDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.DeleteDevice(payload.DeviceID); err != nil {
+	if err := s.store.DeleteDevice(user, payload.DeviceID); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{"success":true}`))
+}
+
+// 공식 배포 릴리스 다운로드 URL
+const (
+	DownloadAndroidAPK = "https://github.com/dubble95/pax-familia/releases/download/v1.0.0/PaxFamilia-Android-v1.0.apk"
+	DownloadWindowsExe = "https://github.com/dubble95/pax-familia/releases/download/v1.0.0/PaxFamiliaSetup-v1.0.exe"
+	DownloadWindowsZip = "https://github.com/dubble95/pax-familia/releases/download/v1.0.0/PaxFamilia-Windows-Setup-v1.0.zip"
+)
+
+// HandleDownloadAndroid 안드로이드 APK 다운로드 리다이렉트
+func (s *Server) HandleDownloadAndroid(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, DownloadAndroidAPK, http.StatusFound)
+}
+
+// HandleDownloadWindows 윈도우 설치파일(.exe) 다운로드 리다이렉트
+func (s *Server) HandleDownloadWindows(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, DownloadWindowsExe, http.StatusFound)
+}
+
+// HandleDownloadWindowsZip 윈도우 전체 패키지(.zip) 다운로드 리다이렉트
+func (s *Server) HandleDownloadWindowsZip(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, DownloadWindowsZip, http.StatusFound)
 }

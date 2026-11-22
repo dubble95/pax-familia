@@ -7,7 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Pretendard', sans-serif; }
     .pulse-online { animation: pulse 2s infinite; }
     @keyframes pulse {
@@ -16,45 +16,264 @@
     }
   </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen pb-12">
-  <!-- 상단 네비게이션 -->
-  <header class="bg-slate-800/80 backdrop-blur border-b border-slate-700 sticky top-0 z-40">
-    <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-      <div class="flex items-center space-x-3">
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+
+  <!-- ========================================================
+       상단 글로벌 네비게이션 헤더
+  ======================================================== -->
+  <header class="bg-slate-800/90 backdrop-blur border-b border-slate-700/80 sticky top-0 z-40">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-3 cursor-pointer" onclick="handleLogoClick()">
         <span class="text-2xl">🕊️</span>
         <div>
           <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
             PaxFamilia
             <span class="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium border border-indigo-500/30">가정의 평화</span>
           </h1>
-          <p class="text-xs text-slate-400">통합 크로스 플랫폼 스크린타임 관리</p>
+          <p class="text-[11px] text-slate-400">통합 크로스 플랫폼 스크린타임 관리</p>
         </div>
       </div>
-      <div class="flex items-center space-x-3">
-        <!-- 부모 로그인 상태 표시 영역 -->
-        <div id="authContainer" class="flex items-center gap-2">
-          <div id="authLoggedIn" class="hidden flex items-center gap-2">
-            <span class="text-xs bg-indigo-500/20 text-indigo-300 px-2.5 py-1 rounded-lg border border-indigo-500/30 flex items-center gap-1.5 font-medium">
-              <i class="fa-solid fa-shield-halved text-emerald-400"></i>
-              <b id="authUsername">admin</b> (부모)
-            </span>
-            <button onclick="handleLogout()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs text-slate-300 hover:text-white transition">
-              로그아웃
-            </button>
+
+      <div class="flex items-center space-x-2.5">
+        <!-- 앱 다운로드 버튼 (언제나 접근 가능) -->
+        <button onclick="openDownloadModal()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white rounded-lg text-xs font-semibold transition flex items-center gap-1.5 border border-slate-600">
+          <i class="fa-solid fa-download text-indigo-400"></i>
+          <span>앱 다운로드</span>
+        </button>
+
+        <!-- 비로그인 상태일 때 버튼 -->
+        <button id="navLoginBtn" onclick="openLoginModal()" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-950/20">
+          <i class="fa-brands fa-google"></i>
+          <span>로그인</span>
+        </button>
+
+        <!-- 로그인 상태일 때 부모 프로필 & 로그아웃 -->
+        <div id="navUserMenu" class="hidden flex items-center gap-2.5">
+          <div class="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700">
+            <img id="navUserAvatar" src="" alt="Avatar" class="w-6 h-6 rounded-full hidden border border-slate-600">
+            <div id="navUserAvatarFallback" class="w-6 h-6 rounded-full bg-indigo-600/40 text-indigo-300 flex items-center justify-center text-xs font-bold">
+              <i class="fa-solid fa-user"></i>
+            </div>
+            <div class="text-left">
+              <div id="navUserName" class="text-xs font-bold text-slate-200 leading-tight">부모님</div>
+              <div id="navUserEmail" class="text-[10px] text-slate-400 leading-tight">user@gmail.com</div>
+            </div>
           </div>
-          <button id="authLoginBtn" onclick="openLoginModal()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-950/20">
-            <i class="fa-solid fa-user-lock"></i> 부모 로그인
+          <button onclick="handleLogout()" class="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs text-slate-300 hover:text-white transition" title="로그아웃">
+            <i class="fa-solid fa-right-from-bracket"></i>
+          </button>
+          <button onclick="fetchStatus()" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700 transition" title="대시보드 새로고침">
+            <i class="fa-solid fa-arrows-rotate" id="refreshIcon"></i>
           </button>
         </div>
-
-        <button onclick="fetchStatus()" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700 transition" title="새로고침">
-          <i class="fa-solid fa-arrows-rotate" id="refreshIcon"></i>
-        </button>
       </div>
     </div>
   </header>
 
-  <main class="max-w-4xl mx-auto px-4 py-6 space-y-6">
+  <!-- ========================================================
+       뷰 1: 비로그인 랜딩 / 로그인 게이트 (#landingView)
+  ======================================================== -->
+  <section id="landingView" class="max-w-5xl mx-auto px-4 py-10 space-y-12">
+    <!-- 히어로 섹션 -->
+    <div class="text-center space-y-4 py-6">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-semibold mb-2">
+        <i class="fa-solid fa-shield-halved text-indigo-400"></i>
+        <span>가족을 위한 스마트 스크린타임 거버넌스</span>
+      </div>
+      <h2 class="text-3xl md:text-5xl font-black text-white tracking-tight leading-tight">
+        우리 아이의 바른 디지털 습관,<br>
+        <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-sky-300 to-emerald-400">가정의 평화(PaxFamilia)</span>로 시작하세요
+      </h2>
+      <p class="text-slate-400 max-w-2xl mx-auto text-sm md:text-base leading-relaxed">
+        안드로이드 스마트폰, 태블릿부터 윈도우 PC까지 하나의 총량 한도로 통합 관리합니다.<br class="hidden sm:inline">
+        기기를 바꿔가며 쓰더라도 정확한 스크린타임 추적 및 원클릭 올스톱 잠금을 지원합니다.
+      </p>
+    </div>
+
+    <!-- 핵심 로그인 카드 (Google 로그인 중심) -->
+    <div class="max-w-md mx-auto bg-slate-800/90 border border-slate-700 rounded-2xl p-6 shadow-2xl space-y-5">
+      <div class="text-center space-y-1">
+        <h3 class="text-lg font-bold text-white">부모 계정으로 시작하기</h3>
+        <p class="text-xs text-slate-400">구글 계정으로 로그인하여 가족 전용 대시보드를 이용하세요.</p>
+      </div>
+
+      <!-- 원클릭 Google 로그인 버튼군 -->
+      <div class="space-y-3">
+        <button onclick="loginWithGooglePrompt()" class="w-full py-3 px-4 bg-white hover:bg-slate-100 text-slate-800 font-bold rounded-xl flex items-center justify-center gap-3 transition shadow-lg">
+          <svg class="w-5 h-5" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+          </svg>
+          <span>Google 계정으로 계속하기</span>
+        </button>
+
+        <!-- 즉시 체험용 사전 설정 프리셋 -->
+        <div class="pt-2">
+          <div class="text-[11px] font-semibold text-slate-400 text-center mb-2">💡 빠른 체험용 계정 바로 로그인</div>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="quickLoginAs('chulsoo.dad@gmail.com', '김철수 아빠')" class="p-2 bg-slate-700/60 hover:bg-slate-700 border border-slate-600 rounded-lg text-left transition">
+              <div class="text-xs font-bold text-indigo-300">👨 김철수 아빠</div>
+              <div class="text-[10px] text-slate-400 truncate">chulsoo.dad@...</div>
+            </button>
+            <button onclick="quickLoginAs('younghee.mom@gmail.com', '이영희 엄마')" class="p-2 bg-slate-700/60 hover:bg-slate-700 border border-slate-600 rounded-lg text-left transition">
+              <div class="text-xs font-bold text-emerald-300">👩 이영희 엄마</div>
+              <div class="text-[10px] text-slate-400 truncate">younghee.mom@...</div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 구분선 -->
+      <div class="relative flex items-center justify-center">
+        <div class="border-t border-slate-700 w-full"></div>
+        <span class="bg-slate-800 px-2 text-[11px] text-slate-500 absolute">또는</span>
+      </div>
+
+      <!-- 기존 관리자 계정 로그인 아코디언 -->
+      <div>
+        <button onclick="toggleAdminLoginSection()" class="w-full text-xs text-slate-400 hover:text-slate-200 flex items-center justify-center gap-1.5 py-1">
+          <i class="fa-solid fa-lock text-[10px]"></i>
+          <span>관리자 ID/비밀번호로 로그인</span>
+          <i class="fa-solid fa-chevron-down text-[10px]" id="adminToggleIcon"></i>
+        </button>
+        <div id="adminLoginForm" class="hidden mt-3 space-y-3 pt-3 border-t border-slate-700/60">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">아이디</label>
+            <input type="text" id="adminUser" value="admin" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">비밀번호</label>
+            <input type="password" id="adminPass" value="pax1234" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+          </div>
+          <button onclick="submitAdminLogin()" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition">
+            관리자 로그인
+          </button>
+        </div>
+      </div>
+
+      <!-- 로그인 안내 메시지 -->
+      <div id="landingLoginMsg" class="hidden text-xs text-center p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400"></div>
+    </div>
+
+    <!-- ========================================================
+         다운로드 센터 섹션 (공식 배포 릴리스 다운로드 링크)
+    ======================================================== -->
+    <div id="downloadSection" class="pt-6 space-y-6">
+      <div class="text-center space-y-2">
+        <h3 class="text-2xl font-bold text-white flex items-center justify-center gap-2">
+          <i class="fa-solid fa-circle-down text-indigo-400"></i>
+          <span>자녀 기기용 클라이언트 다운로드 센터</span>
+        </h3>
+        <p class="text-xs text-slate-400">설치 후 대시보드의 6자리 코드를 입력하면 즉시 부모 계정에 연동됩니다.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <!-- 1. 윈도우 인스톨러 (.exe) -->
+        <div class="bg-slate-800/90 rounded-2xl p-5 border border-indigo-500/40 hover:border-indigo-500 transition shadow-lg flex flex-col justify-between relative overflow-hidden group">
+          <div class="absolute top-0 right-0 bg-indigo-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-bl-lg">
+            추천
+          </div>
+          <div class="space-y-3">
+            <div class="w-12 h-12 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xl">
+              <i class="fa-brands fa-windows"></i>
+            </div>
+            <div>
+              <h4 class="text-base font-bold text-white">윈도우 GUI 자동 설치파일</h4>
+              <p class="text-xs text-indigo-300 font-mono mt-0.5">PaxFamiliaSetup-v1.0.exe (7.2MB)</p>
+            </div>
+            <ul class="text-xs text-slate-300 space-y-1.5 pt-1">
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-emerald-400 text-[10px]"></i> 간편 더블클릭 GUI 설치 마법사</li>
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-emerald-400 text-[10px]"></i> 윈도우 부팅 시 백그라운드 자동 시작</li>
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-emerald-400 text-[10px]"></i> 시간 소진 시 전체화면 강제 잠금</li>
+            </ul>
+          </div>
+          <div class="pt-5">
+            <a href="/download/windows" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-md shadow-indigo-950/30">
+              <i class="fa-solid fa-download"></i>
+              <span>윈도우 설치파일 다운로드</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- 2. 안드로이드 APK (.apk) -->
+        <div class="bg-slate-800/90 rounded-2xl p-5 border border-emerald-500/40 hover:border-emerald-500 transition shadow-lg flex flex-col justify-between relative overflow-hidden group">
+          <div class="space-y-3">
+            <div class="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl">
+              <i class="fa-brands fa-android"></i>
+            </div>
+            <div>
+              <h4 class="text-base font-bold text-white">안드로이드 전용 앱 (APK)</h4>
+              <p class="text-xs text-emerald-300 font-mono mt-0.5">PaxFamilia-Android-v1.0.apk (6.2MB)</p>
+            </div>
+            <ul class="text-xs text-slate-300 space-y-1.5 pt-1">
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-emerald-400 text-[10px]"></i> 스마트폰 및 태블릿 완벽 호환</li>
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-emerald-400 text-[10px]"></i> 사용 통계 및 활성 앱 실시간 전송</li>
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-emerald-400 text-[10px]"></i> 접근성/오버레이 기반 잠금 화면</li>
+            </ul>
+          </div>
+          <div class="pt-5">
+            <a href="/download/android" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-md shadow-emerald-950/30">
+              <i class="fa-solid fa-download"></i>
+              <span>안드로이드 APK 다운로드</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- 3. 윈도우 수동 포터블 패키지 (.zip) -->
+        <div class="bg-slate-800/90 rounded-2xl p-5 border border-slate-700 hover:border-slate-600 transition shadow-lg flex flex-col justify-between group">
+          <div class="space-y-3">
+            <div class="w-12 h-12 rounded-xl bg-slate-700 text-slate-300 flex items-center justify-center text-xl">
+              <i class="fa-solid fa-file-zipper"></i>
+            </div>
+            <div>
+              <h4 class="text-base font-bold text-white">윈도우 전체 무설치 패키지</h4>
+              <p class="text-xs text-slate-400 font-mono mt-0.5">PaxFamilia-Windows-Setup-v1.0.zip (2.8MB)</p>
+            </div>
+            <ul class="text-xs text-slate-300 space-y-1.5 pt-1">
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-emerald-400 text-[10px]"></i> 포터블 실행 파일 및 배치 스크립트</li>
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-emerald-400 text-[10px]"></i> 1클릭 원클릭 등록 (`install.bat`)</li>
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-emerald-400 text-[10px]"></i> 삭제용 `uninstall.bat` 스크립트 동봉</li>
+            </ul>
+          </div>
+          <div class="pt-5">
+            <a href="/download/windows-zip" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2">
+              <i class="fa-solid fa-download"></i>
+              <span>무설치 ZIP 다운로드</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 간편 연동 3단계 가이드 -->
+    <div class="bg-slate-800/60 rounded-2xl p-6 border border-slate-700/60">
+      <h4 class="text-sm font-bold text-white mb-4 text-center">📱 기기 연동 3단계 가이드</h4>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+        <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50">
+          <div class="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 font-bold mx-auto mb-2 flex items-center justify-center text-sm">1</div>
+          <h5 class="font-bold text-xs text-white">부모 로그인</h5>
+          <p class="text-[11px] text-slate-400 mt-1">Google 계정으로 대시보드에 로그인합니다.</p>
+        </div>
+        <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50">
+          <div class="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 font-bold mx-auto mb-2 flex items-center justify-center text-sm">2</div>
+          <h5 class="font-bold text-xs text-white">클라이언트 앱 설치</h5>
+          <p class="text-[11px] text-slate-400 mt-1">자녀의 폰/PC에 다운로드 받은 앱을 설치합니다.</p>
+        </div>
+        <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50">
+          <div class="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 font-bold mx-auto mb-2 flex items-center justify-center text-sm">3</div>
+          <h5 class="font-bold text-xs text-white">6자리 페어링 코드 입력</h5>
+          <p class="text-[11px] text-slate-400 mt-1">대시보드에서 발급받은 코드를 앱에 입력하면 완료!</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================
+       뷰 2: 로그인된 부모 대시보드 (#dashboardView)
+  ======================================================== -->
+  <main id="dashboardView" class="hidden max-w-5xl mx-auto px-4 py-6 space-y-6">
     <!-- 1. 핵심 현황 요약 카드 -->
     <div class="bg-gradient-to-br from-slate-800 to-slate-850 rounded-2xl p-6 border border-slate-700 shadow-xl relative overflow-hidden">
       <div class="absolute -right-8 -top-8 w-40 h-40 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
@@ -86,7 +305,7 @@
             <i class="fa-solid fa-hand"></i>
             <span id="lockBtnText">즉시 올스톱 잠금</span>
           </button>
-          
+
           <div class="flex items-center gap-1 w-full md:w-auto">
             <button onclick="addBonus(15)" class="flex-1 md:flex-none px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-xl text-xs font-semibold text-emerald-300 transition">
               +15분
@@ -198,168 +417,260 @@
 
       <!-- 새 앱 추가 인풋 -->
       <div class="flex items-center gap-2 pt-2 border-t border-slate-700/50 text-xs">
-        <input type="text" id="newWhitelistApp" placeholder="예: EBS, 메가스터디, 듀오링고, 클래스룸" class="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500">
-        <button onclick="addWhitelistApp()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition flex items-center gap-1.5">
+        <input type="text" id="newWhitelistApp" placeholder="예: EBS, 콴다, 메가스터디, 영어단어" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500">
+        <button onclick="addWhitelistApp()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold transition flex items-center gap-1">
           <i class="fa-solid fa-plus"></i> 추가
         </button>
       </div>
     </div>
 
-    <!-- 6. 하루 기본 할당량 설정 & 초기화 -->
-    <div class="bg-slate-800/80 rounded-2xl p-5 border border-slate-700/80 space-y-3">
-      <div class="flex flex-wrap items-center justify-between gap-4 text-xs">
-        <div class="flex items-center gap-3">
-          <label for="quotaInput" class="text-slate-300 font-semibold">하루 기본 할당 시간:</label>
-          <div class="flex items-center gap-1">
-            <input type="number" id="quotaInput" min="10" max="720" step="10" value="120" class="w-16 bg-slate-900 border border-slate-600 rounded-lg px-2.5 py-1 text-center text-white font-bold focus:outline-none focus:border-indigo-500">
-            <span class="text-slate-400">분</span>
-          </div>
-          <button onclick="updateQuota()" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold transition">
-            변경
-          </button>
-        </div>
+    <!-- 6. 일일 기본 한도 수정 및 개발 테스트 도구 -->
+    <div class="bg-slate-800/60 rounded-2xl p-5 border border-slate-700/60 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <span class="text-xs text-slate-400">일일 기본 한도 변경:</span>
+        <input type="number" id="quotaInput" value="120" min="10" max="600" step="10" class="w-20 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white font-bold text-center">
+        <span class="text-xs text-slate-400">분</span>
+        <button onclick="updateQuota()" class="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-semibold transition">
+          변경
+        </button>
+      </div>
 
-        <button onclick="resetToday()" class="text-slate-400 hover:text-amber-400 transition flex items-center gap-1">
-          <i class="fa-solid fa-rotate-left"></i> 오늘 사용량 초기화 (테스트용)
+      <div class="flex items-center gap-2">
+        <button onclick="resetToday()" class="px-3 py-1.5 bg-rose-900/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 rounded-lg text-xs font-semibold transition" title="오늘의 사용량을 0으로 초기화">
+          <i class="fa-solid fa-rotate-left mr-1"></i> 오늘 사용량 리셋
         </button>
       </div>
     </div>
   </main>
 
-  <!-- ======================== 모달 영역 ======================== -->
+  <!-- ========================================================
+       모달 1: 6자리 페어링 코드 모달 (#pairingModal)
+  ======================================================== -->
+  <div id="pairingModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-sm w-full p-6 space-y-5 shadow-2xl relative">
+      <button onclick="closePairingModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white p-1">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
 
-  <!-- A. 부모 로그인 모달 -->
-  <div id="loginModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl relative">
-      <div class="flex items-center justify-between mb-4">
-        <div class="flex items-center gap-2.5">
-          <div class="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
-            <i class="fa-solid fa-lock text-base"></i>
-          </div>
-          <div>
-            <h3 class="font-bold text-base text-white">부모 로그인</h3>
-            <p class="text-[11px] text-slate-400">대시보드 관리자 권한 인증</p>
-          </div>
+      <div class="text-center space-y-1">
+        <div class="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto text-xl mb-2">
+          <i class="fa-solid fa-link"></i>
         </div>
-        <button onclick="closeLoginModal()" class="text-slate-400 hover:text-white text-lg">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
+        <h3 class="text-lg font-bold text-white">새 자녀 기기 등록</h3>
+        <p class="text-xs text-slate-400">자녀의 폰이나 PC 앱에서 아래 6자리 코드를 입력하세요.</p>
       </div>
 
-      <form onsubmit="handleLoginSubmit(event)" class="space-y-4">
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1">아이디</label>
-          <input type="text" id="loginUsername" value="admin" class="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 font-medium">
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1">비밀번호</label>
-          <input type="password" id="loginPassword" placeholder="기본: pax1234" class="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
-        </div>
-
-        <div id="loginError" class="hidden p-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">
-          아이디 또는 비밀번호가 올바르지 않습니다.
-        </div>
-
-        <div class="flex gap-2 pt-2">
-          <button type="button" onclick="closeLoginModal()" class="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-xs font-semibold text-slate-300 transition">
-            취소
-          </button>
-          <button type="submit" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-950/30">
-            로그인
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- B. 새 기기 등록 (6자리 페어링 코드) 모달 -->
-  <div id="pairingModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl relative space-y-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2.5">
-          <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-            <i class="fa-solid fa-link text-base"></i>
-          </div>
-          <div>
-            <h3 class="font-bold text-base text-white">새 기기 등록 (페어링)</h3>
-            <p class="text-[11px] text-slate-400">자녀의 폰, 태블릿, PC를 연동합니다</p>
-          </div>
-        </div>
-        <button onclick="closePairingModal()" class="text-slate-400 hover:text-white text-lg">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-      </div>
-
-      <!-- 6자리 핀코드 디스플레이 -->
-      <div class="text-center py-4 bg-slate-900 rounded-2xl border border-emerald-500/30 space-y-2">
-        <div class="text-xs text-slate-400 font-medium">기기에서 아래 6자리 코드를 입력하세요</div>
-        <div id="pairingCodeDisplay" class="text-4xl md:text-5xl font-mono font-black tracking-[0.25em] text-emerald-400 select-all py-1">
+      <!-- 6자리 코드 표시 박스 -->
+      <div class="bg-slate-900 border-2 border-dashed border-emerald-500/40 rounded-xl p-4 text-center space-y-2">
+        <div id="pairingCodeDisplay" class="text-4xl font-black tracking-widest text-emerald-400 font-mono">
           ------
         </div>
-        <div class="flex items-center justify-center gap-2 text-xs text-slate-400">
-          <span>⏱️ 남은 유효 시간:</span>
-          <b id="pairingTimer" class="text-amber-400 font-mono">15:00</b>
-          <button onclick="copyPairingCode()" class="ml-2 text-xs text-slate-400 hover:text-white bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-            <i class="fa-regular fa-copy"></i> 복사
-          </button>
+        <div class="text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
+          <i class="fa-regular fa-clock text-amber-400"></i>
+          <span>유효시간: <b id="pairingTimer" class="text-amber-400">15:00</b></span>
         </div>
       </div>
 
-      <!-- 기기별 연동 안내 -->
-      <div class="space-y-2 text-xs text-slate-300 bg-slate-900/60 rounded-xl p-3.5 border border-slate-700/50">
-        <div class="font-bold text-slate-200 mb-1 flex items-center gap-1.5">
-          <i class="fa-solid fa-circle-info text-indigo-400"></i> 기기별 등록 방법
-        </div>
-        <div class="space-y-1.5 text-slate-400">
-          <div class="flex items-start gap-2">
-            <span class="text-indigo-400 font-bold">1.</span>
-            <span><b>안드로이드 앱:</b> 앱 실행 후 초기 [기기 등록] 화면에 위 6자리 입력</span>
-          </div>
-          <div class="flex items-start gap-2">
-            <span class="text-indigo-400 font-bold">2.</span>
-            <span><b>윈도우 PC:</b> 설치 파일 실행 시 6자리 입력 또는 <code>pax-winagent.exe -code &lt;코드&gt;</code></span>
-          </div>
-          <div class="flex items-start gap-2">
-            <span class="text-indigo-400 font-bold">3.</span>
-            <span><b>테스트 시뮬레이터:</b> <code>./bin/pax-sim -code &lt;코드&gt;</code> 실행 시 즉시 등록</span>
-          </div>
-        </div>
+      <div class="flex gap-2">
+        <button onclick="copyPairingCode()" class="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-xs font-bold text-slate-200 transition flex items-center justify-center gap-1.5">
+          <i class="fa-regular fa-copy"></i> 코드 복사
+        </button>
+        <button onclick="requestNewPairingCode()" class="py-2 px-3 bg-slate-700 hover:bg-slate-600 rounded-xl text-xs font-bold text-slate-200 transition" title="새 코드 재발급">
+          <i class="fa-solid fa-rotate"></i>
+        </button>
       </div>
 
-      <div class="flex gap-2 pt-1">
-        <button onclick="requestNewPairingCode()" class="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-xs font-semibold text-slate-300 transition flex items-center justify-center gap-1.5">
-          <i class="fa-solid fa-rotate"></i> 새 코드 발급
-        </button>
-        <button onclick="closePairingModal()" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition">
-          완료 / 닫기
-        </button>
+      <div class="text-[11px] text-slate-400 bg-slate-900/60 p-3 rounded-lg border border-slate-700/50 space-y-1">
+        <p class="font-bold text-slate-300 mb-0.5">📌 기기별 입력 방법:</p>
+        <p>• <b>안드로이드 앱</b>: 메인 화면의 6자리 입력란에 코드를 입력하고 [기기 연동 등록] 터치</p>
+        <p>• <b>윈도우 PC</b>: 설치 마법사에서 코드 입력 또는 <code class="text-indigo-300">install.bat [코드]</code> 실행</p>
       </div>
     </div>
   </div>
 
-  <script>
-    let currentData = null;
-    let authToken = localStorage.getItem('pax_auth_token') || '';
-    let pairingTimerInterval = null;
-    let pairingExpiresAt = null;
+  <!-- ========================================================
+       모달 2: 클라이언트 다운로드 모달 (#downloadModal)
+  ======================================================== -->
+  <div id="downloadModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl relative">
+      <button onclick="closeDownloadModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white p-1">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
 
-    // --- 인증 관련 함수 ---
-    function updateAuthUI(isLoggedIn, username) {
-      const loggedInDiv = document.getElementById('authLoggedIn');
-      const loginBtn = document.getElementById('authLoginBtn');
-      if (isLoggedIn) {
-        loggedInDiv.classList.remove('hidden');
-        loginBtn.classList.add('hidden');
-        document.getElementById('authUsername').textContent = username || 'admin';
+      <div class="space-y-1">
+        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-cloud-arrow-down text-indigo-400"></i>
+          <span>자녀 기기용 앱 다운로드</span>
+        </h3>
+        <p class="text-xs text-slate-400">자녀의 기기 유형에 맞는 클라이언트를 다운로드하세요.</p>
+      </div>
+
+      <div class="space-y-3">
+        <!-- 윈도우 인스톨러 -->
+        <a href="/download/windows" class="flex items-center justify-between p-3.5 bg-slate-900 hover:bg-slate-750 border border-slate-700 hover:border-indigo-500 rounded-xl transition group">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-lg">
+              <i class="fa-brands fa-windows"></i>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-white group-hover:text-indigo-300 transition">윈도우 GUI 자동 설치파일 (.exe)</div>
+              <div class="text-[11px] text-slate-400">PaxFamiliaSetup-v1.0.exe (7.2MB) - 설치 마법사</div>
+            </div>
+          </div>
+          <span class="text-xs font-bold text-indigo-400 flex items-center gap-1">
+            <i class="fa-solid fa-download"></i> 다운로드
+          </span>
+        </a>
+
+        <!-- 안드로이드 APK -->
+        <a href="/download/android" class="flex items-center justify-between p-3.5 bg-slate-900 hover:bg-slate-750 border border-slate-700 hover:border-emerald-500 rounded-xl transition group">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg">
+              <i class="fa-brands fa-android"></i>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-white group-hover:text-emerald-300 transition">안드로이드 앱 패키지 (.apk)</div>
+              <div class="text-[11px] text-slate-400">PaxFamilia-Android-v1.0.apk (6.2MB) - 폰/태블릿</div>
+            </div>
+          </div>
+          <span class="text-xs font-bold text-emerald-400 flex items-center gap-1">
+            <i class="fa-solid fa-download"></i> 다운로드
+          </span>
+        </a>
+
+        <!-- 윈도우 무설치 ZIP -->
+        <a href="/download/windows-zip" class="flex items-center justify-between p-3.5 bg-slate-900 hover:bg-slate-750 border border-slate-700 hover:border-slate-500 rounded-xl transition group">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center text-lg">
+              <i class="fa-solid fa-file-zipper"></i>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-white group-hover:text-slate-200 transition">윈도우 무설치 전체 패키지 (.zip)</div>
+              <div class="text-[11px] text-slate-400">PaxFamilia-Windows-Setup-v1.0.zip (2.8MB) - 배치스크립트 동봉</div>
+            </div>
+          </div>
+          <span class="text-xs font-bold text-slate-400 flex items-center gap-1">
+            <i class="fa-solid fa-download"></i> 다운로드
+          </span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================
+       모달 3: 부모 로그인 모달 (#loginModal)
+  ======================================================== -->
+  <div id="loginModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl relative">
+      <button onclick="closeLoginModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white p-1">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+
+      <div class="text-center space-y-1">
+        <div class="w-10 h-10 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto text-lg mb-2">
+          <i class="fa-solid fa-user-lock"></i>
+        </div>
+        <h3 class="text-base font-bold text-white">부모 로그인</h3>
+        <p class="text-xs text-slate-400">계정을 선택하거나 입력하세요.</p>
+      </div>
+
+      <button onclick="loginWithGooglePrompt()" class="w-full py-2.5 px-3 bg-white hover:bg-slate-100 text-slate-800 font-bold rounded-xl flex items-center justify-center gap-2.5 transition text-xs shadow-md">
+        <i class="fa-brands fa-google text-red-500"></i>
+        <span>Google 계정으로 로그인</span>
+      </button>
+
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <button onclick="quickLoginAs('chulsoo.dad@gmail.com', '김철수 아빠')" class="p-2 bg-slate-900 border border-slate-700 rounded-lg text-left hover:border-indigo-500 transition">
+          <div class="text-xs font-bold text-indigo-300">👨 김철수 아빠</div>
+          <div class="text-[10px] text-slate-500 truncate">chulsoo.dad@...</div>
+        </button>
+        <button onclick="quickLoginAs('younghee.mom@gmail.com', '이영희 엄마')" class="p-2 bg-slate-900 border border-slate-700 rounded-lg text-left hover:border-emerald-500 transition">
+          <div class="text-xs font-bold text-emerald-300">👩 이영희 엄마</div>
+          <div class="text-[10px] text-slate-500 truncate">younghee.mom@...</div>
+        </button>
+      </div>
+
+      <div class="relative flex items-center justify-center my-2">
+        <div class="border-t border-slate-700 w-full"></div>
+        <span class="bg-slate-800 px-2 text-[10px] text-slate-500 absolute">또는 ID/PW</span>
+      </div>
+
+      <div class="space-y-2">
+        <input type="text" id="modalAdminUser" value="admin" placeholder="아이디" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+        <input type="password" id="modalAdminPass" value="pax1234" placeholder="비밀번호" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+        <button onclick="submitModalAdminLogin()" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition">
+          로그인
+        </button>
+      </div>
+
+      <div id="modalLoginMsg" class="hidden text-xs text-center p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400"></div>
+    </div>
+  </div>
+
+  <!-- ========================================================
+       프론트엔드 스크립트
+  ======================================================== -->
+  <script>
+    let authToken = localStorage.getItem('pax_auth_token') || '';
+    let currentUser = null;
+    let currentData = null;
+    let statusInterval = null;
+    let pairingTimerInterval = null;
+    let pairingExpiresAt = 0;
+
+    // --- 뷰 전환 및 인증 UI 제어 ---
+    function updateAuthState(authenticated, user) {
+      const landingView = document.getElementById('landingView');
+      const dashboardView = document.getElementById('dashboardView');
+      const navLoginBtn = document.getElementById('navLoginBtn');
+      const navUserMenu = document.getElementById('navUserMenu');
+
+      if (authenticated && user) {
+        currentUser = user;
+        landingView.classList.add('hidden');
+        dashboardView.classList.remove('hidden');
+
+        navLoginBtn.classList.add('hidden');
+        navUserMenu.classList.remove('hidden');
+
+        document.getElementById('navUserName').textContent = user.name || '부모님';
+        document.getElementById('navUserEmail').textContent = user.email || '';
+
+        const avatarImg = document.getElementById('navUserAvatar');
+        const avatarFallback = document.getElementById('navUserAvatarFallback');
+        if (user.picture) {
+          avatarImg.src = user.picture;
+          avatarImg.classList.remove('hidden');
+          avatarFallback.classList.add('hidden');
+        } else {
+          avatarImg.classList.add('hidden');
+          avatarFallback.classList.remove('hidden');
+        }
+
+        // 로그인 상태일 때만 주기적 상태 갱신 시작
+        if (!statusInterval) {
+          fetchStatus();
+          statusInterval = setInterval(fetchStatus, 2000);
+        }
       } else {
-        loggedInDiv.classList.add('hidden');
-        loginBtn.classList.remove('hidden');
+        currentUser = null;
+        dashboardView.classList.add('hidden');
+        landingView.classList.remove('hidden');
+
+        navLoginBtn.classList.remove('hidden');
+        navUserMenu.classList.add('hidden');
+
+        if (statusInterval) {
+          clearInterval(statusInterval);
+          statusInterval = null;
+        }
       }
     }
 
+    // 초기 세션 검증
     async function checkAuth() {
       if (!authToken) {
-        updateAuthUI(false);
+        updateAuthState(false);
         return;
       }
       try {
@@ -367,34 +678,89 @@
           headers: { 'Authorization': 'Bearer ' + authToken }
         });
         const data = await res.json();
-        if (data.authenticated) {
-          updateAuthUI(true, data.username);
+        if (data.authenticated && data.user) {
+          updateAuthState(true, data.user);
         } else {
-          localStorage.removeItem('pax_auth_token');
           authToken = '';
-          updateAuthUI(false);
+          localStorage.removeItem('pax_auth_token');
+          updateAuthState(false);
         }
-      } catch (e) {
-        console.error(e);
+      } catch (err) {
+        console.error('인증 확인 실패:', err);
+        updateAuthState(false);
       }
     }
 
-    function openLoginModal() {
-      document.getElementById('loginError').classList.add('hidden');
-      document.getElementById('loginModal').classList.remove('hidden');
+    // --- Google 로그인 핸들러 ---
+    async function loginWithGooglePrompt() {
+      const email = prompt('로그인할 Google 이메일을 입력하세요:\n(예: father.kim@gmail.com, mother.lee@gmail.com)', 'father.kim@gmail.com');
+      if (!email || !email.trim()) return;
+
+      const defaultName = email.split('@')[0] + ' (부모)';
+      const name = prompt('표시할 부모 이름을 입력하세요:', defaultName) || defaultName;
+
+      await executeGoogleLogin({
+        email: email.trim(),
+        name: name.trim(),
+        picture: 'https://lh3.googleusercontent.com/a/default-user=s96-c'
+      });
     }
 
-    function closeLoginModal() {
-      document.getElementById('loginModal').classList.add('hidden');
+    async function quickLoginAs(email, name) {
+      await executeGoogleLogin({
+        email: email,
+        name: name,
+        picture: 'https://lh3.googleusercontent.com/a/default-user=s96-c'
+      });
     }
 
-    async function handleLoginSubmit(e) {
-      e.preventDefault();
-      const u = document.getElementById('loginUsername').value.trim();
-      const p = document.getElementById('loginPassword').value;
-      const errEl = document.getElementById('loginError');
-      errEl.classList.add('hidden');
+    async function executeGoogleLogin(payload) {
+      try {
+        const res = await fetch('/api/auth/google', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success && data.token) {
+          authToken = data.token;
+          localStorage.setItem('pax_auth_token', authToken);
+          closeLoginModal();
+          updateAuthState(true, data.user);
+          fetchStatus();
+        } else {
+          showLoginError(data.error || 'Google 로그인에 실패했습니다.');
+        }
+      } catch (err) {
+        showLoginError('서버 연결 실패: ' + err.message);
+      }
+    }
 
+    // --- 관리자(ID/PW) 로그인 ---
+    function toggleAdminLoginSection() {
+      const form = document.getElementById('adminLoginForm');
+      const icon = document.getElementById('adminToggleIcon');
+      form.classList.toggle('hidden');
+      icon.classList.toggle('fa-chevron-up');
+      icon.classList.toggle('fa-chevron-down');
+    }
+
+    async function submitAdminLogin() {
+      const u = document.getElementById('adminUser').value.trim();
+      const p = document.getElementById('adminPass').value.trim();
+      if (!u || !p) return;
+      await executeAdminLogin(u, p, 'landingLoginMsg');
+    }
+
+    async function submitModalAdminLogin() {
+      const u = document.getElementById('modalAdminUser').value.trim();
+      const p = document.getElementById('modalAdminPass').value.trim();
+      if (!u || !p) return;
+      await executeAdminLogin(u, p, 'modalLoginMsg');
+    }
+
+    async function executeAdminLogin(u, p, errorTargetId) {
+      const errEl = document.getElementById(errorTargetId);
       try {
         const res = await fetch('/api/auth/login', {
           method: 'POST',
@@ -405,17 +771,27 @@
         if (data.success && data.token) {
           authToken = data.token;
           localStorage.setItem('pax_auth_token', authToken);
-          updateAuthUI(true, data.username);
           closeLoginModal();
-          fetchStatus();
+          await checkAuth();
         } else {
-          errEl.textContent = data.error || '로그인에 실패했습니다.';
-          errEl.classList.remove('hidden');
+          if (errEl) {
+            errEl.textContent = data.error || '로그인 실패';
+            errEl.classList.remove('hidden');
+          }
         }
       } catch (err) {
-        errEl.textContent = '서버 연결 실패: ' + err.message;
-        errEl.classList.remove('hidden');
+        if (errEl) {
+          errEl.textContent = '서버 연결 실패: ' + err.message;
+          errEl.classList.remove('hidden');
+        }
       }
+    }
+
+    function showLoginError(msg) {
+      const m1 = document.getElementById('landingLoginMsg');
+      const m2 = document.getElementById('modalLoginMsg');
+      if (m1) { m1.textContent = msg; m1.classList.remove('hidden'); }
+      if (m2) { m2.textContent = msg; m2.classList.remove('hidden'); }
     }
 
     async function handleLogout() {
@@ -426,26 +802,52 @@
           headers: { 'Authorization': 'Bearer ' + authToken }
         });
       } catch (e) {}
-      localStorage.removeItem('pax_auth_token');
       authToken = '';
-      updateAuthUI(false);
+      localStorage.removeItem('pax_auth_token');
+      currentData = null;
+      updateAuthState(false);
     }
 
-    // --- 페어링 코드 모달 관련 ---
+    function handleLogoClick() {
+      if (currentUser) {
+        fetchStatus();
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+
+    // --- 모달 제어 ---
+    function openLoginModal() {
+      document.getElementById('loginModal').classList.remove('hidden');
+    }
+    function closeLoginModal() {
+      document.getElementById('loginModal').classList.add('hidden');
+      const m = document.getElementById('modalLoginMsg');
+      if (m) m.classList.add('hidden');
+    }
+
+    function openDownloadModal() {
+      document.getElementById('downloadModal').classList.remove('hidden');
+    }
+    function closeDownloadModal() {
+      document.getElementById('downloadModal').classList.add('hidden');
+    }
+
     async function openPairingModal() {
       document.getElementById('pairingModal').classList.remove('hidden');
       await requestNewPairingCode();
     }
-
     function closePairingModal() {
       document.getElementById('pairingModal').classList.add('hidden');
       if (pairingTimerInterval) clearInterval(pairingTimerInterval);
       fetchStatus();
     }
 
+    // --- 페어링 코드 발급 및 타이머 ---
     async function requestNewPairingCode() {
       const codeEl = document.getElementById('pairingCodeDisplay');
       codeEl.textContent = '생성 중...';
+      const childId = currentData?.child?.id || '';
       try {
         const res = await fetch('/api/devices/pairing-code', {
           method: 'POST',
@@ -453,18 +855,22 @@
             'Content-Type': 'application/json',
             'Authorization': 'Bearer ' + authToken
           },
-          body: JSON.stringify({ child_id: 'child_1' })
+          body: JSON.stringify({ child_id: childId })
         });
+        if (res.status === 401) {
+          updateAuthState(false);
+          return;
+        }
         const data = await res.json();
         if (data.success && data.code) {
           codeEl.textContent = data.code;
           pairingExpiresAt = new Date(data.expires_at).getTime();
           startPairingTimer();
         } else {
-          codeEl.textContent = '오류 발생';
+          codeEl.textContent = '오류';
         }
       } catch (err) {
-        codeEl.textContent = '오류 발생';
+        codeEl.textContent = '오류';
       }
     }
 
@@ -488,13 +894,13 @@
 
     function copyPairingCode() {
       const code = document.getElementById('pairingCodeDisplay').textContent.trim();
-      if (!code || code === '------' || code.includes('오류')) return;
+      if (!code || code === '------' || code.includes('오류') || code.includes('만료')) return;
       navigator.clipboard.writeText(code).then(() => {
-        alert('페어링 코드(' + code + ')가 클립보드에 복사되었습니다.');
+        alert(`페어링 코드 [${code}]가 클립보드에 복사되었습니다.\n자녀 기기 앱에 입력하세요.`);
       });
     }
 
-    // 기기 연동 해제 (삭제)
+    // --- 기기 삭제(연동 해제) ---
     async function deleteDevice(deviceId, deviceName) {
       if (!confirm(`'${deviceName}' 기기의 연동을 해제하시겠습니까?`)) return;
       try {
@@ -512,16 +918,24 @@
           alert('기기 연동 해제 실패');
         }
       } catch (e) {
-        alert('서버 통신 실패: ' + e.message);
+        alert('통신 오류: ' + e.message);
       }
     }
 
-    // --- 전체 상태 조회 및 렌더링 ---
+    // --- 대시보드 상태 조회 및 렌더링 ---
     async function fetchStatus() {
+      if (!authToken) return;
       const icon = document.getElementById('refreshIcon');
       if (icon) icon.classList.add('fa-spin');
       try {
-        const res = await fetch('/api/status?child_id=child_1');
+        const childParam = currentData?.child?.id ? `?child_id=${encodeURIComponent(currentData.child.id)}` : '';
+        const res = await fetch('/api/status' + childParam, {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        if (res.status === 401) {
+          updateAuthState(false);
+          return;
+        }
         if (!res.ok) throw new Error('Status load failed');
         currentData = await res.json();
         render();
@@ -544,6 +958,7 @@
       document.getElementById('dailyQuota').textContent = child.daily_quota_minutes + '분';
       document.getElementById('bonusTime').textContent = '+' + child.bonus_minutes + '분';
       document.getElementById('usedTime').textContent = usedMinutes + '분';
+      document.getElementById('quotaInput').value = child.daily_quota_minutes;
 
       const remEl = document.getElementById('remainingTime');
       remEl.textContent = remainingMinutes + '분';
@@ -553,7 +968,7 @@
         remEl.className = 'text-4xl md:text-5xl font-black tracking-tight text-white';
       }
 
-      // 잠금 배지 & 버튼
+      // 잠금 배지 & 제어 버튼 상태
       const lockBadge = document.getElementById('lockBadge');
       const lockBadgeText = document.getElementById('lockBadgeText');
       const lockBtn = document.getElementById('lockToggleBtn');
@@ -569,7 +984,7 @@
         lockBtn.innerHTML = '<i class="fa-solid fa-hand"></i><span>즉시 올스톱 잠금</span>';
       }
 
-      // 진행률 바
+      // 프로그레스 바
       const pct = totalAllowed > 0 ? Math.min(100, Math.round((child.used_seconds / totalAllowed) * 100)) : 100;
       const pBar = document.getElementById('progressBar');
       pBar.style.width = pct + '%';
@@ -582,10 +997,7 @@
         pBar.className = 'bg-indigo-500 h-full rounded-full transition-all duration-500';
       }
 
-      // ⭐️ 기기 카드 순서 고정 정렬 알고리즘:
-      // 1) created_at(등록일시)이 존재하면 등록 순서대로 고정
-      // 2) 유형별 고정 순서 (폰 -> 태블릿 -> PC)
-      // 3) ID 기준
+      // ⭐️ 기기 카드 순서 결정론적 고정 정렬 (플리커링 방지)
       const typeRank = { 'android_phone': 1, 'android_tablet': 2, 'windows_pc': 3 };
       const rawDevices = currentData.devices || [];
       const sortedDevices = [...rawDevices].sort((a, b) => {
@@ -598,11 +1010,33 @@
         return (a.id || '').localeCompare(b.id || '');
       });
 
-      // 기기 카드 렌더링 & 통계 누적
+      // 기기 카드 렌더링
       const deviceContainer = document.getElementById('deviceList');
       deviceContainer.innerHTML = '';
 
       let phoneSec = 0, tabletSec = 0, pcSec = 0;
+
+      if (sortedDevices.length === 0) {
+        deviceContainer.innerHTML = `
+          <div class="col-span-full bg-slate-800/60 border border-dashed border-slate-700 rounded-xl p-8 text-center space-y-3">
+            <div class="w-12 h-12 rounded-full bg-indigo-500/10 text-indigo-400 flex items-center justify-center mx-auto text-xl">
+              <i class="fa-solid fa-laptop-mobile"></i>
+            </div>
+            <div>
+              <h4 class="text-sm font-bold text-white">연동된 자녀 기기가 없습니다</h4>
+              <p class="text-xs text-slate-400 mt-1">자녀의 폰이나 PC에 앱을 설치하고 [새 기기 등록]을 눌러 연동하세요.</p>
+            </div>
+            <div class="flex items-center justify-center gap-2 pt-2">
+              <button onclick="openPairingModal()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-md">
+                <i class="fa-solid fa-plus"></i> 새 기기 등록
+              </button>
+              <button onclick="openDownloadModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-bold transition flex items-center gap-1.5">
+                <i class="fa-solid fa-download"></i> 앱 다운로드
+              </button>
+            </div>
+          </div>
+        `;
+      }
 
       sortedDevices.forEach(dev => {
         let iconClass = 'fa-mobile-screen-button';
@@ -628,10 +1062,10 @@
           statusBadge = '<span class="text-xs text-emerald-400 font-bold flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400 pulse-online"></span> 사용 중</span>';
           borderClass = 'border-emerald-500/40 bg-slate-800/90 shadow-md shadow-emerald-950/30';
         } else if (dev.status === 'idle') {
-          statusBadge = '<span class="text-xs text-amber-400 font-semibold">🟡 유휴(자리비움)</span>';
+          statusBadge = '<span class="text-xs text-amber-400 font-semibold">🟡 유휴</span>';
           borderClass = 'border-amber-500/30';
         } else if (dev.status === 'locked') {
-          statusBadge = '<span class="text-xs text-red-400 font-bold">🔒 화면 잠김</span>';
+          statusBadge = '<span class="text-xs text-red-400 font-bold">🔒 잠김</span>';
           borderClass = 'border-red-500/40';
         }
 
@@ -715,83 +1149,88 @@
       return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
 
+    // --- 제어 API 호출군 ---
     async function toggleLock() {
       if (!currentData || !currentData.child) return;
       const targetState = !currentData.child.force_locked;
       await fetch('/api/lock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-        body: JSON.stringify({ child_id: 'child_1', lock: targetState })
+        body: JSON.stringify({ child_id: currentData.child.id, lock: targetState })
       });
       fetchStatus();
     }
 
     async function addBonus(mins) {
+      if (!currentData || !currentData.child) return;
       await fetch('/api/bonus', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-        body: JSON.stringify({ child_id: 'child_1', minutes: mins })
+        body: JSON.stringify({ child_id: currentData.child.id, minutes: mins })
       });
       fetchStatus();
     }
 
     async function updateQuota() {
+      if (!currentData || !currentData.child) return;
       const val = parseInt(document.getElementById('quotaInput').value, 10);
       if (isNaN(val) || val <= 0) return alert('올바른 분(시간)을 입력하세요');
       await fetch('/api/quota', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-        body: JSON.stringify({ child_id: 'child_1', minutes: val })
+        body: JSON.stringify({ child_id: currentData.child.id, minutes: val })
       });
       fetchStatus();
     }
 
     async function updateBedtime() {
+      if (!currentData || !currentData.child) return;
       const enabled = document.getElementById('bedtimeToggle').checked;
       const start = document.getElementById('bedtimeStart').value;
       const end = document.getElementById('bedtimeEnd').value;
       await fetch('/api/bedtime', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-        body: JSON.stringify({ child_id: 'child_1', enabled, start, end })
+        body: JSON.stringify({ child_id: currentData.child.id, enabled, start, end })
       });
       fetchStatus();
     }
 
     async function addWhitelistApp() {
+      if (!currentData || !currentData.child) return;
       const input = document.getElementById('newWhitelistApp');
       const val = input.value.trim();
       if (!val) return;
       await fetch('/api/whitelist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-        body: JSON.stringify({ child_id: 'child_1', action: 'add', app: val })
+        body: JSON.stringify({ child_id: currentData.child.id, action: 'add', app: val })
       });
       input.value = '';
       fetchStatus();
     }
 
     async function removeWhitelistApp(app) {
+      if (!currentData || !currentData.child) return;
       await fetch('/api/whitelist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-        body: JSON.stringify({ child_id: 'child_1', action: 'remove', app })
+        body: JSON.stringify({ child_id: currentData.child.id, action: 'remove', app })
       });
       fetchStatus();
     }
 
     async function resetToday() {
+      if (!currentData || !currentData.child) return;
       if (!confirm('오늘의 사용 시간을 초기화하시겠습니까? (테스트용)')) return;
-      await fetch('/api/reset?child_id=child_1', {
+      await fetch(`/api/reset?child_id=${encodeURIComponent(currentData.child.id)}`, {
         headers: { 'Authorization': 'Bearer ' + authToken }
       });
       fetchStatus();
     }
 
-    // 초기화
+    // 진입점 실행
     checkAuth();
-    fetchStatus();
-    setInterval(fetchStatus, 2000);
   </script>
 </body>
 </html>
