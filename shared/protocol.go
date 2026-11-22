@@ -31,6 +31,12 @@ type Child struct {
 	ForceLocked       bool      `json:"force_locked"`        // 부모에 의한 강제 즉시 잠금 상태
 	LastResetDate     string    `json:"last_reset_date"`     // "YYYY-MM-DD" 마지막 리셋 날짜
 	UpdatedAt         time.Time `json:"updated_at"`
+
+	// Phase 3 신규 규칙: 취침 모드 및 학습용 화이트리스트
+	BedtimeEnabled  bool     `json:"bedtime_enabled"`  // 취침 시간 자동 잠금 활성화
+	BedtimeStart    string   `json:"bedtime_start"`    // "22:00"
+	BedtimeEnd      string   `json:"bedtime_end"`      // "07:00"
+	WhitelistedApps []string `json:"whitelisted_apps"` // 학습/교육용 예외 앱 (차감 면제)
 }
 
 // Device 등록된 기기 정보 모델
@@ -43,6 +49,7 @@ type Device struct {
 	CurrentApp   string       `json:"current_app"`   // 현재 활성화된 앱 또는 창 제목
 	BatteryLevel int          `json:"battery_level"` // 배터리 잔량 (안드로이드)
 	LastSeen     time.Time    `json:"last_seen"`
+	UsedSeconds  int          `json:"used_seconds"`  // 오늘 이 기기에서 사용한 시간 (초)
 }
 
 // HeartbeatRequest 클라이언트에서 10~30초마다 전송하는 요청
@@ -65,6 +72,7 @@ type HeartbeatResponse struct {
 	LockReason       string `json:"lock_reason"`       // 잠금 사유 ("시간 소진", "부모 강제 잠금", "취침 시간")
 	WarningMessage   string `json:"warning_message"`   // 경고 메시지 ("남은 시간 5분입니다")
 	NextCheckSeconds int    `json:"next_check_seconds"` // 다음 하트비트 폴링 간격 (초)
+	IsWhitelisted    bool   `json:"is_whitelisted"`    // 현재 실행 중인 앱이 학습용 예외인지 여부
 }
 
 // SystemStatus 부모 대시보드 및 텔레그램용 종합 상태

@@ -32,7 +32,8 @@ data class HeartbeatResponse(
     @SerializedName("should_lock") val shouldLock: Boolean,
     @SerializedName("lock_reason") val lockReason: String?,
     @SerializedName("warning_message") val warningMessage: String?,
-    @SerializedName("next_check_seconds") val nextCheckSeconds: Int?
+    @SerializedName("next_check_seconds") val nextCheckSeconds: Int?,
+    @SerializedName("is_whitelisted") val isWhitelisted: Boolean?
 )
 
 data class Child(

@@ -64,6 +64,9 @@ func main() {
 	mux.HandleFunc("/api/lock", srv.HandleLock)
 	mux.HandleFunc("/api/bonus", srv.HandleBonus)
 	mux.HandleFunc("/api/quota", srv.HandleQuota)
+	mux.HandleFunc("/api/bedtime", srv.HandleBedtime)
+	mux.HandleFunc("/api/whitelist", srv.HandleWhitelist)
+	mux.HandleFunc("/api/telegram", srv.HandleTelegram)
 	mux.HandleFunc("/api/reset", srv.HandleResetToday)
 
 	// 정적 웹 대시보드 서빙

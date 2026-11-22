@@ -122,7 +122,9 @@ func (a *WindowsAgent) tick() time.Duration {
 			log.Printf("🔓 [잠금 해제] 사용 시간이 충전되어 잠금이 해제되었습니다. 남은 시간: %d분", resp.RemainingMinutes)
 			a.isLocked = false
 		}
-		if resp.WarningMessage != "" {
+		if resp.IsWhitelisted {
+			log.Printf("📖 [학습 앱 감지] '%s' 사용 중 - 스크린타임 차감 제외", currentApp)
+		} else if resp.WarningMessage != "" {
 			log.Printf("⚠️ %s", resp.WarningMessage)
 		}
 		log.Printf("⏱️ [정상 동기화] 오늘 남은 통합 스크린타임: %d분 | 현재 창: %s", resp.RemainingMinutes, currentApp)

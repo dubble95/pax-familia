@@ -6,11 +6,17 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"pax-familia/shared"
 )
+
+var DefaultWhitelistedApps = []string{
+	"EBS", "메가스터디", "엠베스트", "클래스101", "구글 클래스룸",
+	"Google Classroom", "Zoom", "Notion", "Wikipedia", "나무위키",
+}
 
 type Store struct {
 	mu       sync.RWMutex
@@ -42,7 +48,7 @@ func NewStore(filePath string) (*Store, error) {
 		doneCh: make(chan struct{}),
 	}
 
-	// 기존 데이터 파일이 있으면 로드, 없으면 기본 초기 데이터 생성
+	// 기존 데이터 파일 로드 또는 기본값 초기화
 	if err := s.load(); err != nil {
 		today := time.Now().Format("2006-01-02")
 		defaultChild := &shared.Child{
@@ -54,6 +60,10 @@ func NewStore(filePath string) (*Store, error) {
 			ForceLocked:       false,
 			LastResetDate:     today,
 			UpdatedAt:         time.Now(),
+			BedtimeEnabled:    false,
+			BedtimeStart:      "22:00",
+			BedtimeEnd:        "07:00",
+			WhitelistedApps:   DefaultWhitelistedApps,
 		}
 		s.Data.Children[defaultChild.ID] = defaultChild
 
@@ -87,9 +97,24 @@ func NewStore(filePath string) (*Store, error) {
 		}
 
 		_ = s.saveDirect()
+	} else {
+		// 기존 데이터 파일이 로드되었을 때 Phase 3 필드가 비어있으면 기본값 보정
+		s.mu.Lock()
+		for _, child := range s.Data.Children {
+			if len(child.WhitelistedApps) == 0 {
+				child.WhitelistedApps = DefaultWhitelistedApps
+				s.dirty = true
+			}
+			if child.BedtimeStart == "" {
+				child.BedtimeStart = "22:00"
+				child.BedtimeEnd = "07:00"
+				s.dirty = true
+			}
+		}
+		s.mu.Unlock()
 	}
 
-	// 백그라운드 디바운스 플러셔 가동 (Fly.io / SSD 디스크 I/O 절감)
+	// 백그라운드 디바운스 플러셔 가동
 	s.startFlusher()
 
 	return s, nil
@@ -103,7 +128,6 @@ func (s *Store) load() error {
 	return json.Unmarshal(data, &s.Data)
 }
 
-// saveLocked lock이 걸려있는 상태에서 안전하게 파일에 원자적(atomic) 쓰기
 func (s *Store) saveLocked() error {
 	bytes, err := json.MarshalIndent(s.Data, "", "  ")
 	if err != nil {
@@ -122,7 +146,6 @@ func (s *Store) saveDirect() error {
 	return s.saveLocked()
 }
 
-// startFlusher 주기적으로 dirty 상태인 데이터를 일괄 디스크 플러시
 func (s *Store) startFlusher() {
 	ticker := time.NewTicker(2 * time.Second)
 	go func() {
@@ -153,14 +176,12 @@ func (s *Store) startFlusher() {
 	}()
 }
 
-// Close 서버 종료 시 모든 대기 중인 상태를 디스크에 강제 플러시
 func (s *Store) Close() {
 	close(s.stopCh)
 	<-s.doneCh
 	log.Println("💾 모든 데이터가 디스크에 안전하게 보존되었습니다.")
 }
 
-// checkDailyReset 날짜가 바뀌면 사용 시간 초기화
 func (s *Store) checkDailyReset(child *shared.Child) {
 	today := time.Now().Format("2006-01-02")
 	if child.LastResetDate != today {
@@ -169,11 +190,45 @@ func (s *Store) checkDailyReset(child *shared.Child) {
 		child.BonusMinutes = 0
 		child.ForceLocked = false
 		child.UpdatedAt = time.Now()
+
+		// 기기별 오늘 사용량도 리셋
+		for _, dev := range s.Data.Devices {
+			if dev.ChildID == child.ID {
+				dev.UsedSeconds = 0
+			}
+		}
 		s.dirty = true
 	}
 }
 
-// ProcessHeartbeat 기기 하트비트 처리 (적응형 동적 폴링 + 초고속 인메모리 연산)
+// isBedtime 현재 시각(KST 또는 로컬)이 취침 시간 범위에 포함되는지 검사
+func isBedtime(start, end string) bool {
+	if start == "" || end == "" {
+		return false
+	}
+	cur := time.Now().Format("15:04")
+	if start < end {
+		return cur >= start && cur < end
+	}
+	// 자정을 넘기는 경우 (예: 22:00 ~ 07:00)
+	return cur >= start || cur < end
+}
+
+// isAppWhitelisted 현재 앱이 학습용 예외 화이트리스트에 포함되는지 검사 (대소문자 무시 부분 일치)
+func isAppWhitelisted(currentApp string, whitelist []string) bool {
+	if currentApp == "" || len(whitelist) == 0 {
+		return false
+	}
+	lowerApp := strings.ToLower(currentApp)
+	for _, w := range whitelist {
+		if strings.Contains(lowerApp, strings.ToLower(w)) {
+			return true
+		}
+	}
+	return false
+}
+
+// ProcessHeartbeat 기기 하트비트 처리
 func (s *Store) ProcessHeartbeat(req shared.HeartbeatRequest) shared.HeartbeatResponse {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -191,19 +246,16 @@ func (s *Store) ProcessHeartbeat(req shared.HeartbeatRequest) shared.HeartbeatRe
 			Name:              "우리 아이",
 			DailyQuotaMinutes: 120,
 			LastResetDate:     today,
+			BedtimeEnabled:    false,
+			BedtimeStart:      "22:00",
+			BedtimeEnd:        "07:00",
+			WhitelistedApps:   DefaultWhitelistedApps,
 		}
 		s.Data.Children[childID] = child
 		s.dirty = true
 	}
 
 	s.checkDailyReset(child)
-
-	// 유휴(Idle) 상태가 아닐 때만 실제 사용 시간 차감
-	if !req.IsIdle && req.ActiveSeconds > 0 {
-		child.UsedSeconds += req.ActiveSeconds
-		child.UpdatedAt = time.Now()
-		s.dirty = true
-	}
 
 	// 기기 정보 등록 및 업데이트
 	dev, devExists := s.Data.Devices[req.DeviceID]
@@ -226,6 +278,25 @@ func (s *Store) ProcessHeartbeat(req shared.HeartbeatRequest) shared.HeartbeatRe
 	dev.CurrentApp = req.CurrentApp
 	dev.BatteryLevel = req.BatteryLevel
 
+	// 학습용 앱(화이트리스트) 여부 검사
+	isWhitelisted := isAppWhitelisted(req.CurrentApp, child.WhitelistedApps)
+
+	// 유휴(Idle)가 아닐 때 시간 누적 처리
+	warningMsg := ""
+	if !req.IsIdle && req.ActiveSeconds > 0 {
+		dev.UsedSeconds += req.ActiveSeconds
+
+		if isWhitelisted {
+			// 학습용 앱은 스크린타임 차감 제외!
+			warningMsg = fmt.Sprintf("📖 [%s] 학습용 앱 사용 중 (스크린타임 차감 제외)", req.CurrentApp)
+		} else {
+			child.UsedSeconds += req.ActiveSeconds
+		}
+
+		child.UpdatedAt = time.Now()
+		s.dirty = true
+	}
+
 	// 총 허용 시간(초) 계산
 	totalAllowedMinutes := child.DailyQuotaMinutes + child.BonusMinutes
 	totalAllowedSeconds := totalAllowedMinutes * 60
@@ -235,14 +306,17 @@ func (s *Store) ProcessHeartbeat(req shared.HeartbeatRequest) shared.HeartbeatRe
 	}
 	remainingMinutes := (remainingSeconds + 59) / 60
 
-	// 잠금 여부 판정
+	// 잠금 여부 판정 (우선순위: 부모 즉시 잠금 > 취침 모드 > 시간 소진)
 	shouldLock := false
 	lockReason := ""
-	warningMsg := ""
 
 	if child.ForceLocked {
 		shouldLock = true
 		lockReason = "부모에 의한 즉시 잠금"
+		dev.Status = shared.StatusLocked
+	} else if child.BedtimeEnabled && isBedtime(child.BedtimeStart, child.BedtimeEnd) {
+		shouldLock = true
+		lockReason = fmt.Sprintf("취침 시간 잠금 모드 (%s ~ %s)", child.BedtimeStart, child.BedtimeEnd)
 		dev.Status = shared.StatusLocked
 	} else if remainingSeconds <= 0 {
 		shouldLock = true
@@ -255,24 +329,23 @@ func (s *Store) ProcessHeartbeat(req shared.HeartbeatRequest) shared.HeartbeatRe
 			dev.Status = shared.StatusOnline
 		}
 
-		if remainingMinutes <= 5 {
+		if warningMsg == "" && remainingMinutes <= 5 {
 			warningMsg = fmt.Sprintf("남은 시간이 %d분 남았습니다. 작업을 마무리하세요.", remainingMinutes)
 		}
 	}
 
-	// 10만 명 대응: 적응형 동적 주기 (Adaptive Polling) 계산
-	// 잔여 시간이 많을 때는 요청 빈도를 줄여 서버 및 클라우드 부하를 60% 이상 절감
+	// 적응형 동적 주기 계산
 	nextCheckSeconds := 30
 	if shouldLock {
-		nextCheckSeconds = 30 // 이미 잠긴 상태: 30초
+		nextCheckSeconds = 30
 	} else if req.IsIdle {
-		nextCheckSeconds = 60 // 자리비움/화면꺼짐: 60초로 트래픽 절약
+		nextCheckSeconds = 60
 	} else if remainingMinutes <= 5 {
-		nextCheckSeconds = 10 // 5분 이하 마감 임박: 10초 정밀 감지
+		nextCheckSeconds = 10
 	} else if remainingMinutes <= 15 {
-		nextCheckSeconds = 20 // 15분 이하: 20초
+		nextCheckSeconds = 20
 	} else {
-		nextCheckSeconds = 45 // 넉넉할 때: 45초로 서버 요청 66% 감소
+		nextCheckSeconds = 45
 	}
 
 	return shared.HeartbeatResponse{
@@ -282,6 +355,7 @@ func (s *Store) ProcessHeartbeat(req shared.HeartbeatRequest) shared.HeartbeatRe
 		LockReason:       lockReason,
 		WarningMessage:   warningMsg,
 		NextCheckSeconds: nextCheckSeconds,
+		IsWhitelisted:    isWhitelisted,
 	}
 }
 
@@ -302,6 +376,10 @@ func (s *Store) GetStatus(childID string) shared.SystemStatus {
 			Name:              "우리 아이",
 			DailyQuotaMinutes: 120,
 			LastResetDate:     today,
+			BedtimeEnabled:    false,
+			BedtimeStart:      "22:00",
+			BedtimeEnd:        "07:00",
+			WhitelistedApps:   DefaultWhitelistedApps,
 		}
 		s.Data.Children[childID] = child
 		s.dirty = true
@@ -313,7 +391,6 @@ func (s *Store) GetStatus(childID string) shared.SystemStatus {
 	for _, dev := range s.Data.Devices {
 		if dev.ChildID == childID {
 			dCopy := *dev
-			// 1분 이상 응답이 없으면 offline 처리
 			if now.Sub(dCopy.LastSeen) > 60*time.Second {
 				dCopy.Status = shared.StatusOffline
 			}
@@ -363,6 +440,75 @@ func (s *Store) SetDailyQuota(childID string, minutes int) {
 	}
 }
 
+// SetBedtime 취침 모드 설정
+func (s *Store) SetBedtime(childID string, enabled bool, start, end string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if child, exists := s.Data.Children[childID]; exists {
+		child.BedtimeEnabled = enabled
+		if start != "" {
+			child.BedtimeStart = start
+		}
+		if end != "" {
+			child.BedtimeEnd = end
+		}
+		child.UpdatedAt = time.Now()
+		s.dirty = true
+	}
+}
+
+// SetWhitelistedApps 화이트리스트 전체 교체
+func (s *Store) SetWhitelistedApps(childID string, apps []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if child, exists := s.Data.Children[childID]; exists {
+		child.WhitelistedApps = apps
+		child.UpdatedAt = time.Now()
+		s.dirty = true
+	}
+}
+
+// AddWhitelistedApp 화이트리스트 앱 단일 추가
+func (s *Store) AddWhitelistedApp(childID string, app string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if child, exists := s.Data.Children[childID]; exists {
+		trimmed := strings.TrimSpace(app)
+		if trimmed == "" {
+			return
+		}
+		for _, existing := range child.WhitelistedApps {
+			if strings.EqualFold(existing, trimmed) {
+				return
+			}
+		}
+		child.WhitelistedApps = append(child.WhitelistedApps, trimmed)
+		child.UpdatedAt = time.Now()
+		s.dirty = true
+	}
+}
+
+// RemoveWhitelistedApp 화이트리스트 앱 단일 삭제
+func (s *Store) RemoveWhitelistedApp(childID string, app string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if child, exists := s.Data.Children[childID]; exists {
+		var filtered []string
+		for _, existing := range child.WhitelistedApps {
+			if !strings.EqualFold(existing, strings.TrimSpace(app)) {
+				filtered = append(filtered, existing)
+			}
+		}
+		child.WhitelistedApps = filtered
+		child.UpdatedAt = time.Now()
+		s.dirty = true
+	}
+}
+
 // ResetToday 오늘 사용량 초기화
 func (s *Store) ResetToday(childID string) {
 	s.mu.Lock()
@@ -373,6 +519,11 @@ func (s *Store) ResetToday(childID string) {
 		c.BonusMinutes = 0
 		c.ForceLocked = false
 		c.UpdatedAt = time.Now()
+		for _, dev := range s.Data.Devices {
+			if dev.ChildID == childID {
+				dev.UsedSeconds = 0
+			}
+		}
 		s.dirty = true
 	}
 }

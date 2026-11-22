@@ -123,8 +123,10 @@ func main() {
 					lockText := "정상 동작"
 					if res.ShouldLock {
 						lockText = fmt.Sprintf("🔒 [LOCKED: %s]", res.LockReason)
+					} else if res.IsWhitelisted {
+						lockText = "📖 [학습 앱: 시간 차감 면제]"
 					}
-					log.Printf("📱 [%s] 앱: %-15s | 남은시간: %3d분 (%d초) | 상태: %s",
+					log.Printf("📱 [%s] 앱: %-16s | 남은시간: %3d분 (%d초) | 상태: %s",
 						dev.Name, currentApp, res.RemainingMinutes, res.RemainingSeconds, lockText)
 				}
 			}
