@@ -553,9 +553,10 @@ func (s *Store) GetStatus(user *shared.User, childID string) shared.SystemStatus
 	})
 
 	return shared.SystemStatus{
-		User:    user,
-		Child:   child,
-		Devices: devList,
+		Authenticated: true,
+		User:          user,
+		Child:         child,
+		Devices:       devList,
 	}
 }
 

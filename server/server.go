@@ -54,6 +54,13 @@ func (s *Server) getUserFromRequest(r *http.Request) *shared.User {
 	return user
 }
 
+// HandleHealth 서버 헬스체크 (Fly.io 및 모니터링용)
+func (s *Server) HandleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{"status":"ok"}`))
+}
+
 // HandleStatus 전체 상태 조회 (Google 계정별 멀티테넌시 격리)
 func (s *Server) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	user := s.getUserFromRequest(r)

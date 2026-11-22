@@ -149,7 +149,8 @@ type HeartbeatResponse struct {
 
 // SystemStatus 부모 대시보드 및 텔레그램용 종합 상태
 type SystemStatus struct {
-	User    *User    `json:"user,omitempty"`
-	Child   *Child   `json:"child"`
-	Devices []Device `json:"devices"`
+	Authenticated bool     `json:"authenticated"`
+	User          *User    `json:"user,omitempty"`
+	Child         *Child   `json:"child"`
+	Devices       []Device `json:"devices"`
 }

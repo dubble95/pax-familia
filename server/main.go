@@ -59,6 +59,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// API 엔드포인트
+	mux.HandleFunc("/api/health", srv.HandleHealth)
 	mux.HandleFunc("/api/auth/google", srv.HandleGoogleLogin)
 	mux.HandleFunc("/api/auth/login", srv.HandleLogin)
 	mux.HandleFunc("/api/auth/logout", srv.HandleLogout)
