@@ -166,13 +166,34 @@ class PaxService : Service() {
             if (response.isSuccessful) {
                 val respBody = response.body?.string()
                 val resp = gson.fromJson(respBody, HeartbeatResponse::class.java)
+
+                // 오프라인 방어를 위해 서버 잔여 시간을 로컬에 항상 캐시
+                prefs.edit().putInt("local_remaining_seconds", resp.remainingSeconds).apply()
+
                 handleServerResponse(resp)
                 return resp.nextCheckSeconds ?: 15
             } else {
                 Log.w(TAG, "서버 응답 비정상: ${response.code}")
             }
         } catch (e: Exception) {
-            Log.w(TAG, "서버 연결 실패 (오프라인 모드): ${e.message}")
+            Log.w(TAG, "서버 연결 실패 (오프라인 보호 모드 진입): ${e.message}")
+
+            // 🚨 오프라인 우회 방어: 와이파이나 비행기 모드로 차단을 시도해도 로컬 카운트다운 진행
+            var localRem = prefs.getInt("local_remaining_seconds", 7200)
+            if (isScreenOn && !isCurrentlyLocked && elapsedSec > 0) {
+                localRem -= elapsedSec
+                if (localRem < 0) localRem = 0
+                prefs.edit().putInt("local_remaining_seconds", localRem).apply()
+            }
+            val localRemMin = (localRem + 59) / 60
+            updateNotification("오프라인 보호 모드 (남은 시간: ${localRemMin}분)")
+
+            if (localRem <= 0) {
+                if (!isCurrentlyLocked) {
+                    isCurrentlyLocked = true
+                    showLockOverlay("오프라인 상태이지만 오늘 허용된 시간이 모두 소진되었습니다.")
+                }
+            }
         }
         return 15
     }

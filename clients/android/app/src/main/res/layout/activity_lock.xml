@@ -48,6 +48,19 @@
         android:layout_height="52dp"
         android:layout_marginTop="36dp"
         android:backgroundTint="#334155"
+        android:text="부모님께 시간 연장 알림 요청하기"
+        android:textColor="#CBD5E1"
+        android:textSize="14sp" />
+
+    <Button
+        android:id="@+id/btnParentPin"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="12dp"
+        android:backgroundTint="#1E293B"
+        android:text="🔑 부모 비상 해제 (PIN 번호)"
+        android:textColor="#94A3B8"
+        android:textSize="13sp" />
         android:text="부모님께 보너스 시간 요청하기"
         android:textColor="#CBD5E1"
         android:textSize="14sp" />

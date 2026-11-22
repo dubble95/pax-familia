@@ -55,6 +55,11 @@ class OverlayLockActivity : AppCompatActivity() {
             Toast.makeText(this, "부모님께 시간 연장 알림을 요청했습니다. 잠시만 기다려주세요.", Toast.LENGTH_LONG).show()
         }
 
+        // 부모 비상 PIN 해제 (오프라인/긴급용)
+        findViewById<Button>(R.id.btnParentPin).setOnClickListener {
+            showPinDialog()
+        }
+
         // 뒤로가기 버튼 비활성화 (우회 방지)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -69,6 +74,35 @@ class OverlayLockActivity : AppCompatActivity() {
         } else {
             registerReceiver(unlockReceiver, filter)
         }
+    }
+
+    private fun showPinDialog() {
+        val input = android.widget.EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            hint = "부모 PIN 4자리 입력 (기본: 1234)"
+            setPadding(50, 30, 50, 30)
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("🔑 부모 비상 잠금 해제")
+            .setMessage("긴급 상황 시 4자리 PIN 번호를 입력하면 즉시 30분간 잠금이 임시 해제됩니다.")
+            .setView(input)
+            .setPositiveButton("해제") { _, _ ->
+                val entered = input.text.toString().trim()
+                val prefs = getSharedPreferences("pax_prefs", Context.MODE_PRIVATE)
+                val correctPin = prefs.getString("parent_pin", "1234") ?: "1234"
+                if (entered == correctPin) {
+                    Toast.makeText(this, "부모 인증 성공: 30분 임시 해제되었습니다.", Toast.LENGTH_SHORT).show()
+                    val rem = prefs.getInt("local_remaining_seconds", 0) + 1800
+                    prefs.edit().putInt("local_remaining_seconds", rem).apply()
+                    sendBroadcast(Intent(ACTION_UNLOCK))
+                    finish()
+                } else {
+                    Toast.makeText(this, "PIN 번호가 일치하지 않습니다.", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
     }
 
     override fun onDestroy() {

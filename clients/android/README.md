@@ -6,7 +6,7 @@
 
 ## 1. 아키텍처 및 구현 완성 내역
 
-본 안드로이드 클라이언트는 Kotlin 기반으로 작성되었으며, 다음과 같은 핵심 기능이 완전히 구현되어 있습니다:
+본 안드로이드 클라이언트는 Kotlin 기반으로 작성되었으며, 실전 기기 배포를 위한 핵심 로직과 우회 방어 체계가 완전히 구축되어 있습니다:
 
 ```
 clients/android/
@@ -15,12 +15,12 @@ clients/android/
 └── app/
     ├── build.gradle.kts
     └── src/main/
-        ├── AndroidManifest.xml          # 필수 권한 및 컴포넌트 선언
+        ├── AndroidManifest.xml          # 필수 권한 (Android 14 specialUse 대응)
         ├── java/com/paxfamilia/agent/
         │   ├── PaxApp.kt                # Application 클래스 & 알림 채널 생성
         │   ├── MainActivity.kt          # 서버 URL 설정 및 필수 권한 허용 마법사
-        │   ├── PaxService.kt            # 상주 포그라운드 서비스 & 15초 Heartbeat 루프
-        │   ├── OverlayLockActivity.kt   # 시간 초과/즉시 잠금 시 전면 오버레이 차단 액티비티
+        │   ├── PaxService.kt            # 상주 포그라운드 서비스 & 오프라인 우회 방어 타이머
+        │   ├── OverlayLockActivity.kt   # 전면 잠금 창 & 부모 비상 4자리 PIN 해제 다이얼로그
         │   ├── UsageTracker.kt          # UsageStatsManager 기반 현재 실행 앱 감지
         │   ├── BootReceiver.kt          # 폰/태블릿 부팅 시 PaxService 자동 가동
         │   ├── PaxDeviceAdminReceiver.kt # 무단 삭제 방지 기기 관리자(Device Admin)
@@ -29,7 +29,7 @@ clients/android/
         └── res/
             ├── layout/
             │   ├── activity_main.xml    # 부모 설정 및 권한 상태 가이드 UI
-            │   └── activity_lock.xml    # 전면 잠금 화면 레이아웃
+            │   └── activity_lock.xml    # 전면 잠금 화면 레이아웃 (보너스 요청 + PIN 해제)
             ├── values/
             │   ├── strings.xml, colors.xml, themes.xml
             └── xml/
@@ -38,39 +38,41 @@ clients/android/
 
 ---
 
-## 2. 핵심 동작 방식
+## 2. 🛡️ 자녀의 우회 수단(Bypass) 완벽 방어 체계
 
-1. **포그라운드 활성 시간 수집 (`UsageTracker`)**:
-   - `UsageStatsManager`를 통해 현재 실행 중인 앱(유튜브, 로블록스, 브롤스타즈 등)을 감지.
-   - `BroadcastReceiver`로 화면 켜짐/꺼짐(`ACTION_SCREEN_ON`, `ACTION_SCREEN_OFF`)을 감지하여, **화면이 꺼져 있을 때는 배터리를 소모하지 않고 사용 시간 측정을 일시 정지(Doze 친화적)**합니다.
-2. **중앙 서버 / Cloudflare Workers 동기화 (`PaxService`)**:
-   - 15초 주기로 `POST /api/heartbeat` 전송 (서버리스 `https://pax-familia.workers.dev` 또는 홈서버 `http://192.168.0.x:8080`).
-   - 서버 응답에 따라 `remaining_minutes`를 상단 상주 알림에 실시간 업데이트.
-3. **전면 잠금 오버레이 (`OverlayLockActivity`)**:
-   - `should_lock == true` (시간 소진 or 부모 원클릭 잠금) 수신 시 즉시 전면을 덮는 잠금 액티비티 기동.
-   - 뒤로가기 버튼(`onBackPressedDispatcher`), 홈/최근앱 전환 방어.
-   - 부모가 웹 대시보드나 텔레그램에서 보너스 부여 또는 잠금 해제 시, 다음 동기화에서 자동으로 잠금 화면 종료.
-4. **우회 방지 (`PaxDeviceAdminReceiver`)**:
-   - 기기 관리자(Device Admin)로 등록되어 자녀가 앱 관리 화면에서 임의로 삭제하거나 강제 종료할 수 없음.
+1. **오프라인/비행기 모드 탈출 방어 (Offline Fail-Safe Countdown)**:
+   - 자녀가 서버 동기화를 막기 위해 Wi-Fi나 모바일 데이터를 끄더라도, 앱이 마지막으로 수신된 잔여 시간을 기준으로 **로컬에서 1초마다 독립 카운트다운**을 진행합니다.
+   - 시간이 0이 되면 인터넷이 끊겨 있어도 화면이 자동으로 즉시 잠깁니다.
+2. **무단 삭제 및 강제 종료 방지 (`PaxDeviceAdminReceiver`)**:
+   - 안드로이드 **기기 관리자(Device Admin)** 권한으로 등록되어, 부모의 동의 없이 설정 화면에서 앱을 삭제하거나 프로세스를 강제 중지할 수 없습니다.
+3. **취침 모드 및 즉시 올스톱 강제 잠금 (`OverlayLockActivity`)**:
+   - 뒤로가기 버튼(`onBackPressedDispatcher`), 홈/최근앱 전환을 차단하여 다른 앱 사용을 원천 봉쇄합니다.
+4. **부모 긴급 비상 마스터키 (PIN 4자리 해제)**:
+   - 인터넷이 끊겼거나 긴급 통화가 필요한 상황에서, 잠금 화면에서 `[🔑 부모 비상 해제]` 버튼을 누르고 4자리 PIN(기본: `1234`)을 입력하면 30분간 즉시 비상 해제됩니다.
+5. **학습용 앱(EBS, 메가스터디 등) 시간 차감 면제**:
+   - 교육용 앱 실행 시 서버로부터 `is_whitelisted: true`를 수신하여 자녀의 일일 스크린타임 차감을 자동으로 일시 중지합니다.
 
 ---
 
-## 3. 빌드 및 설치 방법
+## 3. 📦 APK 빌드 및 설치 방법
 
-### Android Studio에서 열기:
+### 방법 A: GitHub Actions 자동 빌드 (가장 추천 - 로컬 설치 불필요 🚀)
+1. 이 저장소를 본인 GitHub에 Push합니다.
+2. GitHub 저장소의 **Actions** 탭으로 이동합니다.
+3. **Build Android APK** 워크플로우가 자동으로 실행되어 빌드를 완료합니다.
+4. 완료된 빌드의 **Artifacts**에서 `pax-familia-android-debug.apk`를 다운로드하여 자녀 폰에 바로 설치합니다!
+
+### 방법 B: Android Studio에서 열기
 1. Android Studio를 실행하고 **Open**을 누른 뒤 `clients/android` 폴더를 선택합니다.
-2. Gradle 동기화(Sync)가 완료되면 기기를 USB 또는 Wi-Fi로 연결하고 **Run 'app'** (Shift + F10)을 누릅니다.
-
-### 터미널에서 APK 빌드 (Gradle Wrapper):
-```bash
-cd clients/android
-gradle assembleDebug
-# 생성 위치: app/build/outputs/apk/debug/app-debug.apk
-```
+2. 기기를 USB 디버깅 또는 Wi-Fi로 연결하고 **Run 'app'** (Shift + F10)을 누릅니다.
 
 ---
 
-## 4. Google Family Link와의 병행 운영 요령
+## 4. 📱 실기기(갤럭시 등) 설치 후 필수 권한 승인 가이드
 
-- Google Family Link 부모 앱에서 PaxFamilia 앱을 **"항상 허용(Always Allowed)"** 또는 사용시간 제한 없음으로 설정해 둡니다.
-- Family Link의 취침 시간, 유해 웹사이트 차단, 앱 설치 승인은 그대로 유지하고, **"PC와 태블릿, 스마트폰의 총량 스크린타임 통합 제어"**는 PaxFamilia가 전담합니다.
+앱을 폰이나 태블릿에 처음 설치한 후, `MainActivity`에서 다음 권한을 1회 허용해야 합니다:
+
+1. **사용 기록 접근 허용**: 현재 유튜브/게임 실행 여부 감지
+2. **다른 앱 위에 표시**: 시간 초과 시 잠금 창 표시
+3. **배터리 사용량 최적화 중지 (제한 없음)**: 화면이 켜져 있을 때 백그라운드 프로세스가 OS에 의해 강제 종료되는 현상 방지
+4. **기기 관리자 활성화**: 자녀의 임의 앱 삭제 방지
