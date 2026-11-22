@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">PaxFamilia</string>
+    <string name="device_admin_label">PaxFamilia 자녀 보호</string>
+    <string name="device_admin_description">PaxFamilia 스크린타임 에이전트의 무단 삭제 및 강제 종료를 방지합니다.</string>
+</resources>

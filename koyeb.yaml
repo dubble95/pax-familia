@@ -1,0 +1,20 @@
+# 🕊️ PaxFamilia Koyeb Configuration
+# Koyeb Free Nano 인스턴스 배포 설정
+# https://koyeb.com
+
+name: pax-familia
+services:
+  - name: pax-server
+    type: web
+    dockerfile: Dockerfile
+    regions:
+      - sin
+    instance_type: nano
+    ports:
+      - port: 8080
+        path: /
+    env:
+      - key: PORT
+        value: "8080"
+      - key: DATA_PATH
+        value: "/app/data/pax_state.json"

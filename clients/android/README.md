@@ -4,57 +4,73 @@
 
 ---
 
-## 1. 주요 역할 및 책임
+## 1. 아키텍처 및 구현 완성 내역
 
-1. **포그라운드 활성 시간 수집 (`UsageStatsManager`)**:
-   - 자녀가 현재 화면을 켜고 어떤 앱을 실행 중인지 10~30초 주기로 확인.
-   - 화면이 꺼지면(Screen Off) 사용 시간 누적을 즉시 중지하여 배터리를 절약.
-2. **중앙 서버와 Heartbeat 동기화**:
-   - 30초마다 PaxFamilia 서버(`http://<서버IP>:8080/api/heartbeat`)로 활성 시간을 전송.
-   - 서버로부터 `remaining_minutes`, `should_lock` 명령을 수신.
-3. **전면 잠금 오버레이 (`SYSTEM_ALERT_WINDOW`)**:
-   - `should_lock == true` (시간 소진 or 부모 원클릭 잠금) 시, 즉시 화면 전체를 덮는 잠금 액티비티를 포그라운드로 띄워 다른 앱 접근 차단.
-4. **임의 삭제 방지 (`DeviceAdminReceiver`)**:
-   - 자녀가 설정에서 임의로 앱을 삭제하거나 프로세스를 강제 종료하지 못하도록 기기 관리자(Device Admin) 권한 등록.
-
----
-
-## 2. 안드로이드 핵심 구현 아키텍처
+본 안드로이드 클라이언트는 Kotlin 기반으로 작성되었으며, 다음과 같은 핵심 기능이 완전히 구현되어 있습니다:
 
 ```
 clients/android/
-├── app/src/main/
-│   ├── AndroidManifest.xml          # 필수 권한 (PACKAGE_USAGE_STATS, SYSTEM_ALERT_WINDOW 등)
-│   ├── java/com/paxfamilia/agent/
-│   │   ├── MainActivity.kt          # 최초 설정 UI (서버 URL 입력, 필수 권한 승인 마법사)
-│   │   ├── PaxService.kt            # 백그라운드 상주 포그라운드 서비스 & Heartbeat 루프
-│   │   ├── OverlayLockActivity.kt   # 시간 초과 시 표시되는 전면 차단 화면
-│   │   ├── UsageTracker.kt          # UsageStatsManager 기반 현재 실행 앱 감지
-│   │   ├── BootReceiver.kt          # 폰/태블릿 부팅 시 자동 시작 리시버
-│   │   └── DeviceAdminPolicy.kt     # 무단 삭제 방지 기기 관리자
-│   └── res/layout/
-│       ├── activity_lock.xml        # 잠금 화면 레이아웃 ("오늘 사용시간이 모두 끝났습니다")
-│       └── activity_main.xml        # 권한 허용 가이드 레이아웃
+├── build.gradle.kts
+├── settings.gradle.kts
+└── app/
+    ├── build.gradle.kts
+    └── src/main/
+        ├── AndroidManifest.xml          # 필수 권한 및 컴포넌트 선언
+        ├── java/com/paxfamilia/agent/
+        │   ├── PaxApp.kt                # Application 클래스 & 알림 채널 생성
+        │   ├── MainActivity.kt          # 서버 URL 설정 및 필수 권한 허용 마법사
+        │   ├── PaxService.kt            # 상주 포그라운드 서비스 & 15초 Heartbeat 루프
+        │   ├── OverlayLockActivity.kt   # 시간 초과/즉시 잠금 시 전면 오버레이 차단 액티비티
+        │   ├── UsageTracker.kt          # UsageStatsManager 기반 현재 실행 앱 감지
+        │   ├── BootReceiver.kt          # 폰/태블릿 부팅 시 PaxService 자동 가동
+        │   ├── PaxDeviceAdminReceiver.kt # 무단 삭제 방지 기기 관리자(Device Admin)
+        │   └── model/
+        │       └── Protocol.kt          # JSON 직렬화/역직렬화 데이터 모델
+        └── res/
+            ├── layout/
+            │   ├── activity_main.xml    # 부모 설정 및 권한 상태 가이드 UI
+            │   └── activity_lock.xml    # 전면 잠금 화면 레이아웃
+            ├── values/
+            │   ├── strings.xml, colors.xml, themes.xml
+            └── xml/
+                └── device_admin_policy.xml # 기기 관리자 정책 설정
 ```
 
 ---
 
-## 3. 필수 권한 목록
+## 2. 핵심 동작 방식
 
-```xml
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.paxfamilia.agent">
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
-</manifest>
+1. **포그라운드 활성 시간 수집 (`UsageTracker`)**:
+   - `UsageStatsManager`를 통해 현재 실행 중인 앱(유튜브, 로블록스, 브롤스타즈 등)을 감지.
+   - `BroadcastReceiver`로 화면 켜짐/꺼짐(`ACTION_SCREEN_ON`, `ACTION_SCREEN_OFF`)을 감지하여, **화면이 꺼져 있을 때는 배터리를 소모하지 않고 사용 시간 측정을 일시 정지(Doze 친화적)**합니다.
+2. **중앙 서버 / Cloudflare Workers 동기화 (`PaxService`)**:
+   - 15초 주기로 `POST /api/heartbeat` 전송 (서버리스 `https://pax-familia.workers.dev` 또는 홈서버 `http://192.168.0.x:8080`).
+   - 서버 응답에 따라 `remaining_minutes`를 상단 상주 알림에 실시간 업데이트.
+3. **전면 잠금 오버레이 (`OverlayLockActivity`)**:
+   - `should_lock == true` (시간 소진 or 부모 원클릭 잠금) 수신 시 즉시 전면을 덮는 잠금 액티비티 기동.
+   - 뒤로가기 버튼(`onBackPressedDispatcher`), 홈/최근앱 전환 방어.
+   - 부모가 웹 대시보드나 텔레그램에서 보너스 부여 또는 잠금 해제 시, 다음 동기화에서 자동으로 잠금 화면 종료.
+4. **우회 방지 (`PaxDeviceAdminReceiver`)**:
+   - 기기 관리자(Device Admin)로 등록되어 자녀가 앱 관리 화면에서 임의로 삭제하거나 강제 종료할 수 없음.
+
+---
+
+## 3. 빌드 및 설치 방법
+
+### Android Studio에서 열기:
+1. Android Studio를 실행하고 **Open**을 누른 뒤 `clients/android` 폴더를 선택합니다.
+2. Gradle 동기화(Sync)가 완료되면 기기를 USB 또는 Wi-Fi로 연결하고 **Run 'app'** (Shift + F10)을 누릅니다.
+
+### 터미널에서 APK 빌드 (Gradle Wrapper):
+```bash
+cd clients/android
+gradle assembleDebug
+# 생성 위치: app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ---
 
-## 4. Google Family Link와의 공존 요령
+## 4. Google Family Link와의 병행 운영 요령
 
-- Family Link의 "취침 시간", "성인 사이트 필터링", "앱 설치 승인" 기능은 그대로 켜둡니다.
-- PaxFamilia 앱을 자녀 기기에 설치 후, Family Link 부모 앱에서 PaxFamilia 앱의 "항상 허용(Always Allowed)" 또는 일일 한도 없음을 부여합니다.
-- 이렇게 하면 Family Link가 PaxFamilia를 종료하지 않으며, PaxFamilia가 PC와 태블릿, 폰 전체의 스크린타임 총량을 완벽하게 일원화하여 통제하게 됩니다.
+- Google Family Link 부모 앱에서 PaxFamilia 앱을 **"항상 허용(Always Allowed)"** 또는 사용시간 제한 없음으로 설정해 둡니다.
+- Family Link의 취침 시간, 유해 웹사이트 차단, 앱 설치 승인은 그대로 유지하고, **"PC와 태블릿, 스마트폰의 총량 스크린타임 통합 제어"**는 PaxFamilia가 전담합니다.

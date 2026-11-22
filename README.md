@@ -51,12 +51,38 @@ pax-familia/
 ├── docs/
 │   ├── ARCHITECTURE.md       # 시스템 아키텍처 및 통신 프로토콜
 │   ├── ROADMAP.md            # 단계별 개발 계획 및 마일스톤
-│   └── CLIENT_DESIGN.md      # 안드로이드 및 윈도우 에이전트 설계
-├── server/                   # 중앙 제어 서버 (Go / Python) & 대시보드
+│   ├── SERVERLESS.md         # 서버리스(Cloudflare Workers / Cloud Run) 배포 가이드
+│   └── QUICKSTART.md         # 1분 빠른 실행 가이드
+├── server/                   # 중앙 제어 서버 (Go 로컬/홈서버 바이너리) & 대시보드
+├── serverless/               # ☁️ 100% 무료 서버리스 백엔드 (Cloudflare Workers, Cloud Run)
 ├── clients/
-│   ├── android/              # 안드로이드(폰/태블릿 공용) 포그라운드 모니터링 에이전트
-│   └── windows/              # 윈도우 백그라운드 트레이 에이전트
+│   ├── android/              # 안드로이드(폰/태블릿 공용) Kotlin 에이전트 & 잠금 오버레이
+│   └── windows/              # 윈도우 백그라운드 트레이 에이전트 (Go)
+├── cmd/simulator/            # 3대 기기(폰/태블릿/PC) 통합 가상 시뮬레이터
 └── shared/                   # 공통 데이터 모델 및 통신 프로토콜 정의
+```
+
+---
+
+## ⚡ 빠른 시작 (선택형 아키텍처)
+
+### Option 1: 🚀 Fly.io 무료 클라우드 배포 (강력 추천 🏆)
+24시간 홈서버 없이 **평생 $0**으로 Go 백엔드를 상시 가동합니다. 1GB 영구 디스크 무료 제공으로 데이터가 영구 보존됩니다.
+👉 **[Fly.io 3분 배포 가이드 (docs/FLY_DEPLOY.md)](docs/FLY_DEPLOY.md)** 참조
+
+### Option 2: ☁️ 100% 무료 서버리스 배포 (Cloudflare Workers)
+Cloudflare Workers로 1분 만에 전 세계 엣지에 배포하고, 집 밖 LTE/5G 환경에서도 HTTPS로 안정적으로 관리할 수 있습니다.
+👉 **[서버리스 배포 가이드 (docs/SERVERLESS.md)](docs/SERVERLESS.md)** 참조
+
+### Option 3: 🌐 기타 무료 PaaS (Render.com / Koyeb)
+GitHub 저장소 연결로 1클릭 자동 배포할 수 있습니다.
+👉 **[무료 호스팅 완벽 가이드 (docs/FREE_HOSTING.md)](docs/FREE_HOSTING.md)** 참조
+
+### Option 4: 🏠 홈서버 / 로컬 Go 실행
+```bash
+make build
+make run   # 부모 대시보드: http://localhost:8080
+make sim   # 3대 기기 전환 시뮬레이터 실행
 ```
 
 ---
@@ -65,3 +91,7 @@ pax-familia/
 
 - [시스템 아키텍처 상세 보기 (ARCHITECTURE.md)](docs/ARCHITECTURE.md)
 - [단계별 개발 로드맵 (ROADMAP.md)](docs/ROADMAP.md)
+- [Fly.io 3분 배포 가이드 (FLY_DEPLOY.md)](docs/FLY_DEPLOY.md)
+- [무료 앱 호스팅 가이드 (FREE_HOSTING.md)](docs/FREE_HOSTING.md)
+- [서버리스 배포 가이드 (SERVERLESS.md)](docs/SERVERLESS.md)
+- [1분 빠른 시작 가이드 (QUICKSTART.md)](docs/QUICKSTART.md)

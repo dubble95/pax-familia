@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0F172A"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="32dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🔒"
+        android:textSize="72sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:text="PaxFamilia 잠금 모드"
+        android:textColor="#FFFFFF"
+        android:textSize="24sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvLockReason"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:gravity="center"
+        android:text="오늘의 통합 스크린타임 사용 시간이 모두 끝났습니다."
+        android:textColor="#EF4444"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        android:text="스마트폰, 태블릿, PC의 사용 시간이 모두 일일 한도에 도달했습니다.\n눈과 뇌의 휴식을 위해 기기를 내려놓고 다른 활동을 해보세요!"
+        android:textColor="#94A3B8"
+        android:textSize="14sp" />
+
+    <Button
+        android:id="@+id/btnRequestBonus"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginTop="36dp"
+        android:backgroundTint="#334155"
+        android:text="부모님께 보너스 시간 요청하기"
+        android:textColor="#CBD5E1"
+        android:textSize="14sp" />
+
+</LinearLayout>

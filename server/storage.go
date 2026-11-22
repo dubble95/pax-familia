@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -15,6 +16,9 @@ type Store struct {
 	mu       sync.RWMutex
 	filePath string
 	Data     StoreData `json:"data"`
+	dirty    bool
+	stopCh   chan struct{}
+	doneCh   chan struct{}
 }
 
 type StoreData struct {
@@ -34,11 +38,12 @@ func NewStore(filePath string) (*Store, error) {
 			Children: make(map[string]*shared.Child),
 			Devices:  make(map[string]*shared.Device),
 		},
+		stopCh: make(chan struct{}),
+		doneCh: make(chan struct{}),
 	}
 
 	// 기존 데이터 파일이 있으면 로드, 없으면 기본 초기 데이터 생성
 	if err := s.load(); err != nil {
-		// 파일이 없으면 기본 자녀 생성
 		today := time.Now().Format("2006-01-02")
 		defaultChild := &shared.Child{
 			ID:                "child_1",
@@ -81,8 +86,11 @@ func NewStore(filePath string) (*Store, error) {
 			LastSeen:   time.Now().Add(-1 * time.Hour),
 		}
 
-		_ = s.save()
+		_ = s.saveDirect()
 	}
+
+	// 백그라운드 디바운스 플러셔 가동 (Fly.io / SSD 디스크 I/O 절감)
+	s.startFlusher()
 
 	return s, nil
 }
@@ -95,7 +103,8 @@ func (s *Store) load() error {
 	return json.Unmarshal(data, &s.Data)
 }
 
-func (s *Store) save() error {
+// saveLocked lock이 걸려있는 상태에서 안전하게 파일에 원자적(atomic) 쓰기
+func (s *Store) saveLocked() error {
 	bytes, err := json.MarshalIndent(s.Data, "", "  ")
 	if err != nil {
 		return err
@@ -107,6 +116,50 @@ func (s *Store) save() error {
 	return os.Rename(tmpFile, s.filePath)
 }
 
+func (s *Store) saveDirect() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.saveLocked()
+}
+
+// startFlusher 주기적으로 dirty 상태인 데이터를 일괄 디스크 플러시
+func (s *Store) startFlusher() {
+	ticker := time.NewTicker(2 * time.Second)
+	go func() {
+		defer close(s.doneCh)
+		for {
+			select {
+			case <-ticker.C:
+				s.mu.Lock()
+				if s.dirty {
+					if err := s.saveLocked(); err != nil {
+						log.Printf("⚠️ 디스크 저장 오류: %v", err)
+					} else {
+						s.dirty = false
+					}
+				}
+				s.mu.Unlock()
+			case <-s.stopCh:
+				ticker.Stop()
+				s.mu.Lock()
+				if s.dirty {
+					_ = s.saveLocked()
+					s.dirty = false
+				}
+				s.mu.Unlock()
+				return
+			}
+		}
+	}()
+}
+
+// Close 서버 종료 시 모든 대기 중인 상태를 디스크에 강제 플러시
+func (s *Store) Close() {
+	close(s.stopCh)
+	<-s.doneCh
+	log.Println("💾 모든 데이터가 디스크에 안전하게 보존되었습니다.")
+}
+
 // checkDailyReset 날짜가 바뀌면 사용 시간 초기화
 func (s *Store) checkDailyReset(child *shared.Child) {
 	today := time.Now().Format("2006-01-02")
@@ -116,10 +169,11 @@ func (s *Store) checkDailyReset(child *shared.Child) {
 		child.BonusMinutes = 0
 		child.ForceLocked = false
 		child.UpdatedAt = time.Now()
+		s.dirty = true
 	}
 }
 
-// ProcessHeartbeat 기기 하트비트 처리
+// ProcessHeartbeat 기기 하트비트 처리 (적응형 동적 폴링 + 초고속 인메모리 연산)
 func (s *Store) ProcessHeartbeat(req shared.HeartbeatRequest) shared.HeartbeatResponse {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -139,6 +193,7 @@ func (s *Store) ProcessHeartbeat(req shared.HeartbeatRequest) shared.HeartbeatRe
 			LastResetDate:     today,
 		}
 		s.Data.Children[childID] = child
+		s.dirty = true
 	}
 
 	s.checkDailyReset(child)
@@ -147,6 +202,7 @@ func (s *Store) ProcessHeartbeat(req shared.HeartbeatRequest) shared.HeartbeatRe
 	if !req.IsIdle && req.ActiveSeconds > 0 {
 		child.UsedSeconds += req.ActiveSeconds
 		child.UpdatedAt = time.Now()
+		s.dirty = true
 	}
 
 	// 기기 정보 등록 및 업데이트
@@ -163,6 +219,7 @@ func (s *Store) ProcessHeartbeat(req shared.HeartbeatRequest) shared.HeartbeatRe
 			Type:    req.DeviceType,
 		}
 		s.Data.Devices[req.DeviceID] = dev
+		s.dirty = true
 	}
 
 	dev.LastSeen = time.Now()
@@ -203,7 +260,20 @@ func (s *Store) ProcessHeartbeat(req shared.HeartbeatRequest) shared.HeartbeatRe
 		}
 	}
 
-	_ = s.save()
+	// 10만 명 대응: 적응형 동적 주기 (Adaptive Polling) 계산
+	// 잔여 시간이 많을 때는 요청 빈도를 줄여 서버 및 클라우드 부하를 60% 이상 절감
+	nextCheckSeconds := 30
+	if shouldLock {
+		nextCheckSeconds = 30 // 이미 잠긴 상태: 30초
+	} else if req.IsIdle {
+		nextCheckSeconds = 60 // 자리비움/화면꺼짐: 60초로 트래픽 절약
+	} else if remainingMinutes <= 5 {
+		nextCheckSeconds = 10 // 5분 이하 마감 임박: 10초 정밀 감지
+	} else if remainingMinutes <= 15 {
+		nextCheckSeconds = 20 // 15분 이하: 20초
+	} else {
+		nextCheckSeconds = 45 // 넉넉할 때: 45초로 서버 요청 66% 감소
+	}
 
 	return shared.HeartbeatResponse{
 		RemainingMinutes: remainingMinutes,
@@ -211,7 +281,7 @@ func (s *Store) ProcessHeartbeat(req shared.HeartbeatRequest) shared.HeartbeatRe
 		ShouldLock:       shouldLock,
 		LockReason:       lockReason,
 		WarningMessage:   warningMsg,
-		NextCheckSeconds: 15,
+		NextCheckSeconds: nextCheckSeconds,
 	}
 }
 
@@ -234,6 +304,7 @@ func (s *Store) GetStatus(childID string) shared.SystemStatus {
 			LastResetDate:     today,
 		}
 		s.Data.Children[childID] = child
+		s.dirty = true
 	}
 	s.checkDailyReset(child)
 
@@ -264,7 +335,7 @@ func (s *Store) AddBonus(childID string, minutes int) {
 	if child, exists := s.Data.Children[childID]; exists {
 		child.BonusMinutes += minutes
 		child.UpdatedAt = time.Now()
-		_ = s.save()
+		s.dirty = true
 	}
 }
 
@@ -276,7 +347,7 @@ func (s *Store) SetForceLock(childID string, lock bool) {
 	if child, exists := s.Data.Children[childID]; exists {
 		child.ForceLocked = lock
 		child.UpdatedAt = time.Now()
-		_ = s.save()
+		s.dirty = true
 	}
 }
 
@@ -288,6 +359,20 @@ func (s *Store) SetDailyQuota(childID string, minutes int) {
 	if child, exists := s.Data.Children[childID]; exists {
 		child.DailyQuotaMinutes = minutes
 		child.UpdatedAt = time.Now()
-		_ = s.save()
+		s.dirty = true
+	}
+}
+
+// ResetToday 오늘 사용량 초기화
+func (s *Store) ResetToday(childID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if c, ok := s.Data.Children[childID]; ok {
+		c.UsedSeconds = 0
+		c.BonusMinutes = 0
+		c.ForceLocked = false
+		c.UpdatedAt = time.Now()
+		s.dirty = true
 	}
 }

@@ -132,14 +132,7 @@ func (s *Server) HandleResetToday(w http.ResponseWriter, r *http.Request) {
 	if childID == "" {
 		childID = "child_1"
 	}
-	s.store.mu.Lock()
-	if c, ok := s.store.Data.Children[childID]; ok {
-		c.UsedSeconds = 0
-		c.BonusMinutes = 0
-		c.ForceLocked = false
-		_ = s.store.save()
-	}
-	s.store.mu.Unlock()
+	s.store.ResetToday(childID)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"success":true}`))
 }

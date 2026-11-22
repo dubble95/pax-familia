@@ -1,0 +1,14 @@
+name = "pax-familia"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# Cloudflare Workers KV 바인딩 (영속적 상태 저장소)
+# 배포 전 npx wrangler kv:namespace create PAX_KV 실행 후 반환된 id를 아래에 입력하세요.
+# (KV 바인딩이 없어도 메모리 폴백으로 즉시 테스트 가능합니다)
+# [[kv_namespaces]]
+# binding = "PAX_KV"
+# id = "your-kv-namespace-id"
+
+# 환경 변수 (텔레그램 봇 연동 시 사용)
+# [vars]
+# TELEGRAM_BOT_TOKEN = "your-telegram-bot-token"

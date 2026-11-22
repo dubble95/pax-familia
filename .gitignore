@@ -28,4 +28,6 @@ Thumbs.db
 *.db-journal
 *.sqlite
 *.log
+*.tmp
+data/*.json
 .env

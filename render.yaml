@@ -1,0 +1,16 @@
+# 🕊️ PaxFamilia Render.com 1-Click Blueprint
+# Render 무료 티어 웹 서비스 배포 설정
+# https://render.com
+
+services:
+  - type: web
+    name: pax-familia
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: DATA_PATH
+        value: /app/data/pax_state.json

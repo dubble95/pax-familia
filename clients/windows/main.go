@@ -43,18 +43,26 @@ func (a *WindowsAgent) Run() {
 	log.Printf("📡 서버 주소: %s", a.config.ServerURL)
 	log.Printf("🆔 기기 ID: %s (%s)", a.config.DeviceID, a.config.DeviceName)
 
-	ticker := time.NewTicker(a.config.Interval)
+	currentInterval := a.config.Interval
+	ticker := time.NewTicker(currentInterval)
 	defer ticker.Stop()
 
 	// 초기 하트비트
-	a.tick()
+	if next := a.tick(); next > 0 {
+		currentInterval = next
+		ticker.Reset(currentInterval)
+	}
 
 	for range ticker.C {
-		a.tick()
+		if next := a.tick(); next > 0 && next != currentInterval {
+			currentInterval = next
+			ticker.Reset(currentInterval)
+			log.Printf("🔄 [적응형 동적 폴링] 다음 동기화 간격: %v", currentInterval)
+		}
 	}
 }
 
-func (a *WindowsAgent) tick() {
+func (a *WindowsAgent) tick() time.Duration {
 	now := time.Now()
 	elapsedSeconds := int(now.Sub(a.lastTick).Seconds())
 	a.lastTick = now
@@ -95,7 +103,7 @@ func (a *WindowsAgent) tick() {
 	resp, err := a.sendHeartbeat(req)
 	if err != nil {
 		log.Printf("⚠️ 서버 하트비트 전송 실패 (오프라인 모드 유지): %v", err)
-		return
+		return a.config.Interval
 	}
 
 	// 3. 잠금 처리 로직
@@ -119,6 +127,11 @@ func (a *WindowsAgent) tick() {
 		}
 		log.Printf("⏱️ [정상 동기화] 오늘 남은 통합 스크린타임: %d분 | 현재 창: %s", resp.RemainingMinutes, currentApp)
 	}
+
+	if resp.NextCheckSeconds > 0 {
+		return time.Duration(resp.NextCheckSeconds) * time.Second
+	}
+	return a.config.Interval
 }
 
 func (a *WindowsAgent) sendHeartbeat(req shared.HeartbeatRequest) (*shared.HeartbeatResponse, error) {

@@ -13,12 +13,11 @@ flowchart TD
         TelegramBot["텔레그램 봇 (원클릭 잠금/보너스)"]
     end
 
-    subgraph Central_Core["PaxFamilia 중앙 코어 (Home Server / Cloud)"]
-        Server["API & 동기화 서버 (Go or FastAPI)"]
-        DB[(SQLite / Redis / PocketBase)]
-        Scheduler["일일 쿼터 리셋 & 스케줄러"]
+    subgraph Central_Core["PaxFamilia 중앙 코어 (선택형 듀얼 배포)"]
+        direction TB
+        Server["Go 바이너리 서버 (홈서버/라즈베리파이) OR\nCloudflare Workers 서버리스 (100% 무료 엣지)"]
+        DB[(JSON / SQLite / Workers KV)]
         Server --> DB
-        Scheduler --> DB
     end
 
     subgraph Devices["자녀 기기군 (Client Agents)"]
